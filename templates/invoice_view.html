@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+
+{% block title %}Invoice {{ invoice.invoice_number }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-10 mx-auto">
+        <!-- Action Bar -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <a href="{{ url_for('invoices') }}" class="btn btn-outline-secondary btn-sm me-2">
+                    <i class="bi bi-arrow-left me-1"></i> Back
+                </a>
+                <h4 class="d-inline mb-0">{{ invoice.invoice_number }}</h4>
+                {% if invoice.status == 'paid' %}
+                <span class="badge bg-success ms-2">Paid</span>
+                {% elif invoice.status == 'sent' %}
+                <span class="badge bg-primary ms-2">Sent</span>
+                {% elif invoice.status == 'overdue' %}
+                <span class="badge bg-danger ms-2">Overdue</span>
+                {% elif invoice.status == 'draft' %}
+                <span class="badge bg-secondary ms-2">Draft</span>
+                {% elif invoice.status == 'cancelled' %}
+                <span class="badge bg-dark ms-2">Cancelled</span>
+                {% endif %}
+            </div>
+            <div class="btn-group">
+                <a href="{{ url_for('edit_invoice', invoice_id=invoice.id) }}" class="btn btn-outline-primary">
+                    <i class="bi bi-pencil me-1"></i> Edit
+                </a>
+                <a href="{{ url_for('download_invoice_pdf', invoice_id=invoice.id) }}" class="btn btn-outline-primary">
+                    <i class="bi bi-download me-1"></i> PDF
+                </a>
+                <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#shareModal">
+                    <i class="bi bi-share me-1"></i> Share
+                </button>
+                <button type="button" class="btn btn-outline-primary dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown">
+                    <span class="visually-hidden">More</span>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li>
+                        <form action="{{ url_for('duplicate_invoice', invoice_id=invoice.id) }}" method="POST">
+                            <button type="submit" class="dropdown-item"><i class="bi bi-copy me-2"></i>Duplicate</button>
+                        </form>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <form action="{{ url_for('delete_invoice', invoice_id=invoice.id) }}" method="POST" onsubmit="return confirm('Delete this invoice?');">
+                            <button type="submit" class="dropdown-item text-danger"><i class="bi bi-trash me-2"></i>Delete</button>
+                        </form>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Status Update -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body py-2">
+                <form action="{{ url_for('update_invoice_status', invoice_id=invoice.id) }}" method="POST" class="d-flex align-items-center gap-3">
+                    <span class="text-muted">Update Status:</span>
+                    <div class="btn-group btn-group-sm">
+                        <button type="submit" name="status" value="draft" class="btn {{ 'btn-secondary' if invoice.status == 'draft' else 'btn-outline-secondary' }}">Draft</button>
+                        <button type="submit" name="status" value="sent" class="btn {{ 'btn-primary' if invoice.status == 'sent' else 'btn-outline-primary' }}">Sent</button>
+                        <button type="submit" name="status" value="paid" class="btn {{ 'btn-success' if invoice.status == 'paid' else 'btn-outline-success' }}">Paid</button>
+                        <button type="submit" name="status" value="cancelled" class="btn {{ 'btn-dark' if invoice.status == 'cancelled' else 'btn-outline-dark' }}">Cancelled</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Invoice Preview -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-5">
+                <!-- Header -->
+                <div class="row mb-5">
+                    <div class="col-6">
+                        <h2 class="text-primary mb-1">INVOICE</h2>
+                        <p class="text-muted mb-0">{{ invoice.invoice_number }}</p>
+                    </div>
+                    <div class="col-6 text-end">
+                        {% if current_user.company_name %}
+                        <h5 class="mb-1">{{ current_user.company_name }}</h5>
+                        {% endif %}
+                        <p class="mb-0">{{ current_user.name }}</p>
+                        {% if current_user.address %}
+                        <p class="text-muted small mb-0" style="white-space: pre-line;">{{ current_user.address }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Bill To & Dates -->
+                <div class="row mb-5">
+                    <div class="col-6">
+                        <p class="text-muted mb-1"><strong>Bill To:</strong></p>
+                        <h5 class="mb-1">{{ invoice.client.name }}</h5>
+                        {% if invoice.client.company_name %}
+                        <p class="mb-0">{{ invoice.client.company_name }}</p>
+                        {% endif %}
+                        {% if invoice.client.email %}
+                        <p class="mb-0 small">{{ invoice.client.email }}</p>
+                        {% endif %}
+                        {% if invoice.client.address %}
+                        <p class="text-muted small mb-0" style="white-space: pre-line;">{{ invoice.client.address }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="col-6 text-end">
+                        <p class="mb-1"><strong>Issue Date:</strong> {{ invoice.issue_date.strftime('%B %d, %Y') }}</p>
+                        <p class="mb-1"><strong>Due Date:</strong> {{ invoice.due_date.strftime('%B %d, %Y') }}</p>
+                        {% if invoice.paid_date %}
+                        <p class="mb-1 text-success"><strong>Paid Date:</strong> {{ invoice.paid_date.strftime('%B %d, %Y') }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Items Table -->
+                <table class="table table-borderless">
+                    <thead class="border-bottom">
+                        <tr>
+                            <th>Description</th>
+                            <th class="text-center" style="width: 100px;">Qty</th>
+                            <th class="text-end" style="width: 120px;">Unit Price</th>
+                            <th class="text-end" style="width: 120px;">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in invoice.items %}
+                        <tr>
+                            <td>{{ item.description }}</td>
+                            <td class="text-center">{{ item.quantity }}</td>
+                            <td class="text-end">{{ invoice.currency }} {{ "%.2f"|format(item.unit_price) }}</td>
+                            <td class="text-end">{{ invoice.currency }} {{ "%.2f"|format(item.total) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+                <!-- Totals -->
+                <div class="row mt-4">
+                    <div class="col-md-6">
+                        {% if invoice.notes %}
+                        <div class="mb-3">
+                            <p class="text-muted mb-1"><strong>Notes:</strong></p>
+                            <p class="small" style="white-space: pre-line;">{{ invoice.notes }}</p>
+                        </div>
+                        {% endif %}
+                        {% if invoice.terms %}
+                        <div>
+                            <p class="text-muted mb-1"><strong>Terms & Conditions:</strong></p>
+                            <p class="small" style="white-space: pre-line;">{{ invoice.terms }}</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-4 offset-md-2">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted">Subtotal:</span>
+                            <span>{{ invoice.currency }} {{ "%.2f"|format(invoice.subtotal) }}</span>
+                        </div>
+                        {% if invoice.tax_rate > 0 %}
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted">Tax ({{ invoice.tax_rate }}%):</span>
+                            <span>{{ invoice.currency }} {{ "%.2f"|format(invoice.tax_amount) }}</span>
+                        </div>
+                        {% endif %}
+                        {% if invoice.discount_amount > 0 %}
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted">Discount:</span>
+                            <span>-{{ invoice.currency }} {{ "%.2f"|format(invoice.discount_amount) }}</span>
+                        </div>
+                        {% endif %}
+                        <hr>
+                        <div class="d-flex justify-content-between">
+                            <strong class="fs-5">Total:</strong>
+                            <strong class="fs-5 text-primary">{{ invoice.currency }} {{ "%.2f"|format(invoice.total) }}</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Invoice Info -->
+        <div class="text-muted small mt-3 text-center">
+            Created {{ invoice.created_at.strftime('%b %d, %Y at %H:%M') }}
+            {% if invoice.view_count > 0 %}
+            &middot; Viewed {{ invoice.view_count }} time{{ 's' if invoice.view_count != 1 }}
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Share Modal -->
+<div class="modal fade" id="shareModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Share Invoice</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">Share this link with your client:</p>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="publicLink"
+                           value="{{ request.url_root }}i/{{ invoice.public_link }}" readonly>
+                    <button class="btn btn-outline-primary" type="button" onclick="copyLink()">
+                        <i class="bi bi-clipboard"></i> Copy
+                    </button>
+                </div>
+                {% if invoice.client.email %}
+                <hr>
+                <p class="text-muted">Or send directly via email:</p>
+                <a href="mailto:{{ invoice.client.email }}?subject=Invoice {{ invoice.invoice_number }}&body=Please find your invoice here: {{ request.url_root }}i/{{ invoice.public_link }}"
+                   class="btn btn-primary w-100">
+                    <i class="bi bi-envelope me-1"></i> Send to {{ invoice.client.email }}
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function copyLink() {
+    const input = document.getElementById('publicLink');
+    input.select();
+    document.execCommand('copy');
+    alert('Link copied to clipboard!');
+}
+</script>
+{% endblock %}

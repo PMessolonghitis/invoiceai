@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice {{ invoice.invoice_number }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            padding: 2rem 0;
+        }
+        .invoice-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        @media print {
+            body { background: white; padding: 0; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container invoice-container">
+        <!-- Print/Download Button -->
+        <div class="text-end mb-3 no-print">
+            <button onclick="window.print()" class="btn btn-outline-primary">
+                <i class="bi bi-printer me-1"></i> Print
+            </button>
+        </div>
+
+        <!-- Invoice Card -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-5">
+                <!-- Status Banner -->
+                {% if invoice.status == 'paid' %}
+                <div class="alert alert-success text-center mb-4">
+                    <strong>PAID</strong> - Thank you for your payment!
+                </div>
+                {% elif invoice.status == 'overdue' %}
+                <div class="alert alert-danger text-center mb-4">
+                    <strong>OVERDUE</strong> - This invoice is past due. Please make payment as soon as possible.
+                </div>
+                {% endif %}
+
+                <!-- Header -->
+                <div class="row mb-5">
+                    <div class="col-6">
+                        <h2 class="text-primary mb-1">INVOICE</h2>
+                        <p class="text-muted mb-0">{{ invoice.invoice_number }}</p>
+                    </div>
+                    <div class="col-6 text-end">
+                        {% if invoice.user.company_name %}
+                        <h5 class="mb-1">{{ invoice.user.company_name }}</h5>
+                        {% endif %}
+                        <p class="mb-0">{{ invoice.user.name }}</p>
+                        {% if invoice.user.address %}
+                        <p class="text-muted small mb-0" style="white-space: pre-line;">{{ invoice.user.address }}</p>
+                        {% endif %}
+                        {% if invoice.user.email %}
+                        <p class="small mb-0">{{ invoice.user.email }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Bill To & Dates -->
+                <div class="row mb-5">
+                    <div class="col-6">
+                        <p class="text-muted mb-1"><strong>Bill To:</strong></p>
+                        <h5 class="mb-1">{{ invoice.client.name }}</h5>
+                        {% if invoice.client.company_name %}
+                        <p class="mb-0">{{ invoice.client.company_name }}</p>
+                        {% endif %}
+                        {% if invoice.client.address %}
+                        <p class="text-muted small mb-0" style="white-space: pre-line;">{{ invoice.client.address }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="col-6 text-end">
+                        <p class="mb-1"><strong>Issue Date:</strong> {{ invoice.issue_date.strftime('%B %d, %Y') }}</p>
+                        <p class="mb-1"><strong>Due Date:</strong> {{ invoice.due_date.strftime('%B %d, %Y') }}</p>
+                    </div>
+                </div>
+
+                <!-- Items Table -->
+                <table class="table table-borderless">
+                    <thead class="border-bottom">
+                        <tr>
+                            <th>Description</th>
+                            <th class="text-center" style="width: 100px;">Qty</th>
+                            <th class="text-end" style="width: 120px;">Unit Price</th>
+                            <th class="text-end" style="width: 120px;">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in invoice.items %}
+                        <tr>
+                            <td>{{ item.description }}</td>
+                            <td class="text-center">{{ item.quantity }}</td>
+                            <td class="text-end">{{ invoice.currency }} {{ "%.2f"|format(item.unit_price) }}</td>
+                            <td class="text-end">{{ invoice.currency }} {{ "%.2f"|format(item.total) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+                <!-- Totals -->
+                <div class="row mt-4">
+                    <div class="col-md-6">
+                        {% if invoice.notes %}
+                        <div class="mb-3">
+                            <p class="text-muted mb-1"><strong>Notes:</strong></p>
+                            <p class="small" style="white-space: pre-line;">{{ invoice.notes }}</p>
+                        </div>
+                        {% endif %}
+                        {% if invoice.terms %}
+                        <div>
+                            <p class="text-muted mb-1"><strong>Terms & Conditions:</strong></p>
+                            <p class="small" style="white-space: pre-line;">{{ invoice.terms }}</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-4 offset-md-2">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted">Subtotal:</span>
+                            <span>{{ invoice.currency }} {{ "%.2f"|format(invoice.subtotal) }}</span>
+                        </div>
+                        {% if invoice.tax_rate > 0 %}
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted">Tax ({{ invoice.tax_rate }}%):</span>
+                            <span>{{ invoice.currency }} {{ "%.2f"|format(invoice.tax_amount) }}</span>
+                        </div>
+                        {% endif %}
+                        {% if invoice.discount_amount > 0 %}
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted">Discount:</span>
+                            <span>-{{ invoice.currency }} {{ "%.2f"|format(invoice.discount_amount) }}</span>
+                        </div>
+                        {% endif %}
+                        <hr>
+                        <div class="d-flex justify-content-between">
+                            <strong class="fs-5">Total:</strong>
+                            <strong class="fs-5 text-primary">{{ invoice.currency }} {{ "%.2f"|format(invoice.total) }}</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center text-muted small mt-4 no-print">
+            <p class="mb-1">Powered by <a href="/" class="text-decoration-none">InvoiceAI</a></p>
+        </div>
+    </div>
+</body>
+</html>

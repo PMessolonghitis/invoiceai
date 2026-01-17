@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8 mx-auto">
+        <h2 class="mb-4">Settings</h2>
+
+        <form method="POST">
+            <!-- Profile Settings -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white py-3">
+                    <h5 class="mb-0">Profile Information</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Your Name *</label>
+                            <input type="text" name="name" class="form-control" required value="{{ current_user.name }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Email</label>
+                            <input type="email" class="form-control" value="{{ current_user.email }}" disabled>
+                            <div class="form-text">Email cannot be changed</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Company Name</label>
+                            <input type="text" name="company_name" class="form-control" value="{{ current_user.company_name or '' }}"
+                                   placeholder="Acme Inc.">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Phone</label>
+                            <input type="tel" name="phone" class="form-control" value="{{ current_user.phone or '' }}"
+                                   placeholder="+1 234 567 8900">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Business Address</label>
+                            <textarea name="address" class="form-control" rows="3"
+                                      placeholder="123 Main St&#10;City, State 12345&#10;Country">{{ current_user.address or '' }}</textarea>
+                            <div class="form-text">This will appear on your invoices</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Invoice Defaults -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white py-3">
+                    <h5 class="mb-0">Invoice Defaults</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Default Currency</label>
+                            <select name="default_currency" class="form-select">
+                                {% set currencies = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'CHF', 'INR', 'CNY', 'BRL', 'MXN', 'SGD', 'HKD', 'NZD', 'SEK', 'NOK', 'DKK', 'ZAR', 'AED', 'PHP'] %}
+                                {% for curr in currencies %}
+                                <option value="{{ curr }}" {{ 'selected' if curr == current_user.default_currency }}>{{ curr }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Default Payment Terms (days)</label>
+                            <select name="default_payment_terms" class="form-select">
+                                <option value="7" {{ 'selected' if current_user.default_payment_terms == 7 }}>Net 7</option>
+                                <option value="14" {{ 'selected' if current_user.default_payment_terms == 14 }}>Net 14</option>
+                                <option value="30" {{ 'selected' if current_user.default_payment_terms == 30 }}>Net 30</option>
+                                <option value="45" {{ 'selected' if current_user.default_payment_terms == 45 }}>Net 45</option>
+                                <option value="60" {{ 'selected' if current_user.default_payment_terms == 60 }}>Net 60</option>
+                                <option value="90" {{ 'selected' if current_user.default_payment_terms == 90 }}>Net 90</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Default Notes</label>
+                            <textarea name="default_notes" class="form-control" rows="3"
+                                      placeholder="Thank you for your business! Payment is due within the specified terms.">{{ current_user.default_notes or '' }}</textarea>
+                            <div class="form-text">This will be pre-filled on new invoices</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-lg">
+                <i class="bi bi-check-lg me-1"></i> Save Settings
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}
