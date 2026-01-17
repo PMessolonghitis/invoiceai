@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}Recurring Invoices{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">Recurring Invoices</h2>
+    <a href="{{ url_for('new_recurring_invoice') }}" class="btn btn-primary">
+        <i class="bi bi-plus-lg me-1"></i> New Recurring Invoice
+    </a>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        {% if recurring_invoices %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Name</th>
+                        <th>Client</th>
+                        <th>Frequency</th>
+                        <th>Amount</th>
+                        <th>Next Invoice</th>
+                        <th>Status</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for recurring in recurring_invoices %}
+                    <tr>
+                        <td>
+                            <a href="{{ url_for('view_recurring_invoice', recurring_id=recurring.id) }}" class="text-decoration-none fw-semibold">
+                                {{ recurring.name }}
+                            </a>
+                        </td>
+                        <td>{{ recurring.client.name }}</td>
+                        <td>
+                            <span class="badge bg-light text-dark">
+                                {% if recurring.frequency == 'weekly' %}
+                                <i class="bi bi-calendar-week me-1"></i>Weekly
+                                {% elif recurring.frequency == 'monthly' %}
+                                <i class="bi bi-calendar-month me-1"></i>Monthly
+                                {% elif recurring.frequency == 'quarterly' %}
+                                <i class="bi bi-calendar3 me-1"></i>Quarterly
+                                {% elif recurring.frequency == 'yearly' %}
+                                <i class="bi bi-calendar me-1"></i>Yearly
+                                {% endif %}
+                            </span>
+                        </td>
+                        <td class="fw-semibold">{{ recurring.currency }} {{ "%.2f"|format(recurring.total) }}</td>
+                        <td>
+                            {% if recurring.status == 'active' %}
+                            {{ recurring.next_invoice_date.strftime('%b %d, %Y') }}
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if recurring.status == 'active' %}
+                            <span class="badge bg-success">Active</span>
+                            {% elif recurring.status == 'paused' %}
+                            <span class="badge bg-warning text-dark">Paused</span>
+                            {% else %}
+                            <span class="badge bg-secondary">{{ recurring.status|title }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <a href="{{ url_for('view_recurring_invoice', recurring_id=recurring.id) }}" class="btn btn-outline-secondary" title="View">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                <a href="{{ url_for('edit_recurring_invoice', recurring_id=recurring.id) }}" class="btn btn-outline-secondary" title="Edit">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <form action="{{ url_for('generate_invoice_from_recurring', recurring_id=recurring.id) }}" method="POST" class="d-inline">
+                                    <button type="submit" class="btn btn-outline-secondary" title="Generate Invoice Now">
+                                        <i class="bi bi-file-earmark-plus"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="bi bi-arrow-repeat text-muted" style="font-size: 3rem;"></i>
+            <p class="text-muted mt-3">
+                No recurring invoices yet. Create one to automate your billing!
+            </p>
+            <a href="{{ url_for('new_recurring_invoice') }}" class="btn btn-primary">
+                <i class="bi bi-plus-lg me-1"></i> Create Recurring Invoice
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="mt-4">
+    <div class="card border-0 shadow-sm">
+        <div class="card-body">
+            <h5 class="card-title"><i class="bi bi-info-circle me-2"></i>How Recurring Invoices Work</h5>
+            <ul class="mb-0 text-muted">
+                <li>Invoices are automatically generated when you visit the dashboard on or after the scheduled date</li>
+                <li>Generated invoices start as drafts - you can review and send them</li>
+                <li>You can pause recurring invoices at any time</li>
+                <li>Use "Generate Now" to manually create an invoice ahead of schedule</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

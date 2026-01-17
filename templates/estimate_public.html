@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Estimate {{ estimate.estimate_number }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            padding: 2rem 0;
+        }
+        .estimate-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        @media print {
+            body { background: white; padding: 0; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container estimate-container">
+        <!-- Print Button -->
+        <div class="text-end mb-3 no-print">
+            <button onclick="window.print()" class="btn btn-outline-primary">
+                <i class="bi bi-printer me-1"></i> Print
+            </button>
+        </div>
+
+        <!-- Estimate Card -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-5">
+                <!-- Status Banner -->
+                {% if estimate.status == 'accepted' %}
+                <div class="alert alert-success text-center mb-4">
+                    <strong>ACCEPTED</strong> - This estimate has been approved.
+                </div>
+                {% elif estimate.status == 'expired' %}
+                <div class="alert alert-warning text-center mb-4">
+                    <strong>EXPIRED</strong> - This estimate is no longer valid.
+                </div>
+                {% elif estimate.status == 'declined' %}
+                <div class="alert alert-danger text-center mb-4">
+                    <strong>DECLINED</strong> - This estimate was not accepted.
+                </div>
+                {% elif estimate.status == 'converted' %}
+                <div class="alert alert-info text-center mb-4">
+                    <strong>CONVERTED</strong> - This estimate has been converted to an invoice.
+                </div>
+                {% endif %}
+
+                <!-- Header -->
+                <div class="row mb-5">
+                    <div class="col-6">
+                        <h2 class="text-info mb-1">ESTIMATE</h2>
+                        <p class="text-muted mb-0">{{ estimate.estimate_number }}</p>
+                        {% if estimate.title %}
+                        <p class="fw-semibold mb-0">{{ estimate.title }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="col-6 text-end">
+                        {% if estimate.user.company_name %}
+                        <h5 class="mb-1">{{ estimate.user.company_name }}</h5>
+                        {% endif %}
+                        <p class="mb-0">{{ estimate.user.name }}</p>
+                        {% if estimate.user.address %}
+                        <p class="text-muted small mb-0" style="white-space: pre-line;">{{ estimate.user.address }}</p>
+                        {% endif %}
+                        {% if estimate.user.email %}
+                        <p class="small mb-0">{{ estimate.user.email }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Prepared For & Dates -->
+                <div class="row mb-5">
+                    <div class="col-6">
+                        <p class="text-muted mb-1"><strong>Prepared For:</strong></p>
+                        <h5 class="mb-1">{{ estimate.client.name }}</h5>
+                        {% if estimate.client.company_name %}
+                        <p class="mb-0">{{ estimate.client.company_name }}</p>
+                        {% endif %}
+                        {% if estimate.client.address %}
+                        <p class="text-muted small mb-0" style="white-space: pre-line;">{{ estimate.client.address }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="col-6 text-end">
+                        <p class="mb-1"><strong>Issue Date:</strong> {{ estimate.issue_date.strftime('%B %d, %Y') }}</p>
+                        <p class="mb-1"><strong>Valid Until:</strong> {{ estimate.valid_until.strftime('%B %d, %Y') }}</p>
+                    </div>
+                </div>
+
+                <!-- Items Table -->
+                <table class="table table-borderless">
+                    <thead class="border-bottom">
+                        <tr>
+                            <th>Description</th>
+                            <th class="text-center" style="width: 100px;">Qty</th>
+                            <th class="text-end" style="width: 120px;">Unit Price</th>
+                            <th class="text-end" style="width: 120px;">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in estimate.items %}
+                        <tr>
+                            <td>{{ item.description }}</td>
+                            <td class="text-center">{{ item.quantity }}</td>
+                            <td class="text-end">{{ estimate.currency }} {{ "%.2f"|format(item.unit_price) }}</td>
+                            <td class="text-end">{{ estimate.currency }} {{ "%.2f"|format(item.total) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+                <!-- Totals -->
+                <div class="row mt-4">
+                    <div class="col-md-6">
+                        {% if estimate.notes %}
+                        <div class="mb-3">
+                            <p class="text-muted mb-1"><strong>Notes:</strong></p>
+                            <p class="small" style="white-space: pre-line;">{{ estimate.notes }}</p>
+                        </div>
+                        {% endif %}
+                        {% if estimate.terms %}
+                        <div>
+                            <p class="text-muted mb-1"><strong>Terms & Conditions:</strong></p>
+                            <p class="small" style="white-space: pre-line;">{{ estimate.terms }}</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-4 offset-md-2">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted">Subtotal:</span>
+                            <span>{{ estimate.currency }} {{ "%.2f"|format(estimate.subtotal) }}</span>
+                        </div>
+                        {% if estimate.tax_rate > 0 %}
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted">Tax ({{ estimate.tax_rate }}%):</span>
+                            <span>{{ estimate.currency }} {{ "%.2f"|format(estimate.tax_amount) }}</span>
+                        </div>
+                        {% endif %}
+                        {% if estimate.discount_amount > 0 %}
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted">Discount:</span>
+                            <span>-{{ estimate.currency }} {{ "%.2f"|format(estimate.discount_amount) }}</span>
+                        </div>
+                        {% endif %}
+                        <hr>
+                        <div class="d-flex justify-content-between">
+                            <strong class="fs-5">Total:</strong>
+                            <strong class="fs-5 text-info">{{ estimate.currency }} {{ "%.2f"|format(estimate.total) }}</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center text-muted small mt-4 no-print">
+            <p class="mb-1">Powered by <a href="/" class="text-decoration-none">InvoiceAI</a></p>
+        </div>
+    </div>
+</body>
+</html>

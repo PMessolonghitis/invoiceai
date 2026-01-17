@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+
+{% block title %}{{ recurring.name }} - Recurring Invoice{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-1">
+                <li class="breadcrumb-item"><a href="{{ url_for('recurring_invoices') }}">Recurring Invoices</a></li>
+                <li class="breadcrumb-item active">{{ recurring.name }}</li>
+            </ol>
+        </nav>
+        <h2 class="mb-0">{{ recurring.name }}</h2>
+    </div>
+    <div class="d-flex gap-2">
+        <form action="{{ url_for('toggle_recurring_invoice', recurring_id=recurring.id) }}" method="POST" class="d-inline">
+            {% if recurring.status == 'active' %}
+            <button type="submit" class="btn btn-warning">
+                <i class="bi bi-pause-fill me-1"></i> Pause
+            </button>
+            {% else %}
+            <button type="submit" class="btn btn-success">
+                <i class="bi bi-play-fill me-1"></i> Resume
+            </button>
+            {% endif %}
+        </form>
+        <form action="{{ url_for('generate_invoice_from_recurring', recurring_id=recurring.id) }}" method="POST" class="d-inline">
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-file-earmark-plus me-1"></i> Generate Invoice Now
+            </button>
+        </form>
+        <a href="{{ url_for('edit_recurring_invoice', recurring_id=recurring.id) }}" class="btn btn-outline-secondary">
+            <i class="bi bi-pencil me-1"></i> Edit
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <!-- Main Details -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Invoice Details</h5>
+                {% if recurring.status == 'active' %}
+                <span class="badge bg-success">Active</span>
+                {% elif recurring.status == 'paused' %}
+                <span class="badge bg-warning text-dark">Paused</span>
+                {% else %}
+                <span class="badge bg-secondary">{{ recurring.status|title }}</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <p class="text-muted mb-1">Client</p>
+                        <p class="fw-semibold mb-0">{{ recurring.client.name }}</p>
+                        {% if recurring.client.company_name %}
+                        <p class="text-muted">{{ recurring.client.company_name }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <p class="text-muted mb-1">Frequency</p>
+                        <p class="fw-semibold">
+                            {% if recurring.frequency == 'weekly' %}
+                            <i class="bi bi-calendar-week me-1"></i>Weekly
+                            {% elif recurring.frequency == 'monthly' %}
+                            <i class="bi bi-calendar-month me-1"></i>Monthly
+                            {% elif recurring.frequency == 'quarterly' %}
+                            <i class="bi bi-calendar3 me-1"></i>Quarterly
+                            {% elif recurring.frequency == 'yearly' %}
+                            <i class="bi bi-calendar me-1"></i>Yearly
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Items Table -->
+                <table class="table table-borderless">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Description</th>
+                            <th class="text-end" style="width: 100px;">Qty</th>
+                            <th class="text-end" style="width: 120px;">Unit Price</th>
+                            <th class="text-end" style="width: 120px;">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in recurring.items %}
+                        <tr>
+                            <td>{{ item.description }}</td>
+                            <td class="text-end">{{ item.quantity }}</td>
+                            <td class="text-end">{{ recurring.currency }} {{ "%.2f"|format(item.unit_price) }}</td>
+                            <td class="text-end">{{ recurring.currency }} {{ "%.2f"|format(item.total) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="3" class="text-end">Subtotal:</td>
+                            <td class="text-end">{{ recurring.currency }} {{ "%.2f"|format(recurring.subtotal) }}</td>
+                        </tr>
+                        {% if recurring.tax_rate > 0 %}
+                        <tr>
+                            <td colspan="3" class="text-end">Tax ({{ recurring.tax_rate }}%):</td>
+                            <td class="text-end">{{ recurring.currency }} {{ "%.2f"|format(recurring.tax_amount) }}</td>
+                        </tr>
+                        {% endif %}
+                        {% if recurring.discount_amount > 0 %}
+                        <tr>
+                            <td colspan="3" class="text-end">Discount:</td>
+                            <td class="text-end">-{{ recurring.currency }} {{ "%.2f"|format(recurring.discount_amount) }}</td>
+                        </tr>
+                        {% endif %}
+                        <tr class="fw-bold fs-5">
+                            <td colspan="3" class="text-end">Total:</td>
+                            <td class="text-end">{{ recurring.currency }} {{ "%.2f"|format(recurring.total) }}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+
+                {% if recurring.notes %}
+                <div class="mt-4">
+                    <p class="text-muted mb-1">Notes</p>
+                    <p class="mb-0">{{ recurring.notes }}</p>
+                </div>
+                {% endif %}
+
+                {% if recurring.terms %}
+                <div class="mt-3">
+                    <p class="text-muted mb-1">Terms & Conditions</p>
+                    <p class="mb-0">{{ recurring.terms }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Generated Invoices -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0">Generated Invoices</h5>
+            </div>
+            <div class="card-body p-0">
+                {% if generated_invoices %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Invoice #</th>
+                                <th>Issue Date</th>
+                                <th>Amount</th>
+                                <th>Status</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for invoice in generated_invoices %}
+                            <tr>
+                                <td>
+                                    <a href="{{ url_for('view_invoice', invoice_id=invoice.id) }}" class="text-decoration-none fw-semibold">
+                                        {{ invoice.invoice_number }}
+                                    </a>
+                                </td>
+                                <td>{{ invoice.issue_date.strftime('%b %d, %Y') }}</td>
+                                <td>{{ invoice.currency }} {{ "%.2f"|format(invoice.total) }}</td>
+                                <td>
+                                    {% if invoice.status == 'paid' %}
+                                    <span class="badge bg-success">Paid</span>
+                                    {% elif invoice.status == 'sent' %}
+                                    <span class="badge bg-primary">Sent</span>
+                                    {% elif invoice.status == 'overdue' %}
+                                    <span class="badge bg-danger">Overdue</span>
+                                    {% elif invoice.status == 'draft' %}
+                                    <span class="badge bg-secondary">Draft</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('view_invoice', invoice_id=invoice.id) }}" class="btn btn-sm btn-outline-secondary">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-4 text-muted">
+                    <i class="bi bi-file-text" style="font-size: 2rem;"></i>
+                    <p class="mt-2 mb-0">No invoices generated yet</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <!-- Schedule Info -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0"><i class="bi bi-calendar-event me-2"></i>Schedule</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <p class="text-muted mb-1">Start Date</p>
+                    <p class="fw-semibold mb-0">{{ recurring.start_date.strftime('%B %d, %Y') }}</p>
+                </div>
+
+                {% if recurring.end_date %}
+                <div class="mb-3">
+                    <p class="text-muted mb-1">End Date</p>
+                    <p class="fw-semibold mb-0">{{ recurring.end_date.strftime('%B %d, %Y') }}</p>
+                </div>
+                {% else %}
+                <div class="mb-3">
+                    <p class="text-muted mb-1">End Date</p>
+                    <p class="text-muted mb-0">No end date (runs indefinitely)</p>
+                </div>
+                {% endif %}
+
+                <div class="mb-3">
+                    <p class="text-muted mb-1">Next Invoice Date</p>
+                    {% if recurring.status == 'active' %}
+                    <p class="fw-semibold mb-0 text-primary">
+                        <i class="bi bi-clock me-1"></i>
+                        {{ recurring.next_invoice_date.strftime('%B %d, %Y') }}
+                    </p>
+                    {% else %}
+                    <p class="text-muted mb-0">Paused</p>
+                    {% endif %}
+                </div>
+
+                {% if recurring.last_generated %}
+                <div class="mb-3">
+                    <p class="text-muted mb-1">Last Generated</p>
+                    <p class="mb-0">{{ recurring.last_generated.strftime('%B %d, %Y') }}</p>
+                </div>
+                {% endif %}
+
+                <div>
+                    <p class="text-muted mb-1">Payment Terms</p>
+                    <p class="mb-0">{{ recurring.payment_terms_days }} days</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0"><i class="bi bi-lightning me-2"></i>Quick Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <form action="{{ url_for('generate_invoice_from_recurring', recurring_id=recurring.id) }}" method="POST">
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-file-earmark-plus me-1"></i> Generate Invoice Now
+                        </button>
+                    </form>
+                    <a href="{{ url_for('edit_recurring_invoice', recurring_id=recurring.id) }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-pencil me-1"></i> Edit Details
+                    </a>
+                    <form action="{{ url_for('toggle_recurring_invoice', recurring_id=recurring.id) }}" method="POST">
+                        {% if recurring.status == 'active' %}
+                        <button type="submit" class="btn btn-outline-warning w-100">
+                            <i class="bi bi-pause-fill me-1"></i> Pause Schedule
+                        </button>
+                        {% else %}
+                        <button type="submit" class="btn btn-outline-success w-100">
+                            <i class="bi bi-play-fill me-1"></i> Resume Schedule
+                        </button>
+                        {% endif %}
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Danger Zone -->
+        <div class="card border-danger">
+            <div class="card-header bg-danger text-white py-2">
+                <h6 class="mb-0"><i class="bi bi-exclamation-triangle me-2"></i>Danger Zone</h6>
+            </div>
+            <div class="card-body">
+                <p class="small text-muted mb-2">This action cannot be undone. Generated invoices will not be affected.</p>
+                <form action="{{ url_for('delete_recurring_invoice', recurring_id=recurring.id) }}" method="POST"
+                      onsubmit="return confirm('Are you sure you want to delete this recurring invoice? This action cannot be undone.');">
+                    <button type="submit" class="btn btn-outline-danger w-100">
+                        <i class="bi bi-trash me-1"></i> Delete Recurring Invoice
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

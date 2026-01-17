@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit Recurring Invoice' if recurring else 'New Recurring Invoice' }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-10 mx-auto">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0">
+                    <i class="bi bi-arrow-repeat me-2"></i>
+                    {{ 'Edit Recurring Invoice' if recurring else 'Create Recurring Invoice' }}
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" id="recurringForm">
+                    <div class="row g-3 mb-4">
+                        <!-- Name -->
+                        <div class="col-md-6">
+                            <label class="form-label">Name *</label>
+                            <input type="text" name="name" class="form-control" required
+                                   placeholder="e.g., Monthly Retainer - Acme Corp"
+                                   value="{{ recurring.name if recurring else '' }}">
+                            <div class="form-text">A friendly name to identify this recurring invoice</div>
+                        </div>
+
+                        <!-- Client Selection -->
+                        <div class="col-md-6">
+                            <label class="form-label">Client *</label>
+                            <select name="client_id" class="form-select" required>
+                                <option value="">Select a client</option>
+                                {% for client in clients %}
+                                <option value="{{ client.id }}" {{ 'selected' if recurring and recurring.client_id == client.id }}>
+                                    {{ client.name }}{% if client.company_name %} ({{ client.company_name }}){% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">
+                                <a href="{{ url_for('new_client') }}">+ Add new client</a>
+                            </div>
+                        </div>
+
+                        <!-- Frequency -->
+                        <div class="col-md-6">
+                            <label class="form-label">Frequency *</label>
+                            <select name="frequency" class="form-select" required>
+                                <option value="weekly" {{ 'selected' if recurring and recurring.frequency == 'weekly' }}>Weekly</option>
+                                <option value="monthly" {{ 'selected' if recurring and recurring.frequency == 'monthly' else ('selected' if not recurring) }}>Monthly</option>
+                                <option value="quarterly" {{ 'selected' if recurring and recurring.frequency == 'quarterly' }}>Quarterly (Every 3 months)</option>
+                                <option value="yearly" {{ 'selected' if recurring and recurring.frequency == 'yearly' }}>Yearly</option>
+                            </select>
+                        </div>
+
+                        <!-- Currency -->
+                        <div class="col-md-6">
+                            <label class="form-label">Currency</label>
+                            <select name="currency" class="form-select">
+                                {% set currencies = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'CHF', 'INR', 'CNY', 'BRL', 'MXN', 'SGD', 'HKD', 'NZD', 'SEK', 'NOK', 'DKK', 'ZAR', 'AED', 'PHP'] %}
+                                {% set current_currency = recurring.currency if recurring else current_user.default_currency %}
+                                {% for curr in currencies %}
+                                <option value="{{ curr }}" {{ 'selected' if curr == current_currency }}>{{ curr }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Start Date -->
+                        <div class="col-md-4">
+                            <label class="form-label">Start Date *</label>
+                            <input type="date" name="start_date" class="form-control" required
+                                   value="{{ recurring.start_date.strftime('%Y-%m-%d') if recurring else today.strftime('%Y-%m-%d') }}">
+                            <div class="form-text">First invoice will be generated on this date</div>
+                        </div>
+
+                        <!-- End Date -->
+                        <div class="col-md-4">
+                            <label class="form-label">End Date (Optional)</label>
+                            <input type="date" name="end_date" class="form-control"
+                                   value="{{ recurring.end_date.strftime('%Y-%m-%d') if recurring and recurring.end_date else '' }}">
+                            <div class="form-text">Leave blank for indefinite</div>
+                        </div>
+
+                        <!-- Payment Terms -->
+                        <div class="col-md-4">
+                            <label class="form-label">Payment Terms (Days)</label>
+                            <input type="number" name="payment_terms_days" class="form-control"
+                                   value="{{ recurring.payment_terms_days if recurring else current_user.default_payment_terms }}" min="0">
+                            <div class="form-text">Days until due date</div>
+                        </div>
+                    </div>
+
+                    <!-- Invoice Items -->
+                    <h6 class="border-bottom pb-2 mb-3">Invoice Items</h6>
+                    <div id="invoiceItems">
+                        {% if recurring and recurring.items %}
+                            {% for item in recurring.items %}
+                            <div class="row g-2 mb-2 item-row">
+                                <div class="col-md-6">
+                                    <input type="text" name="item_description[]" class="form-control"
+                                           placeholder="Description" value="{{ item.description }}" required>
+                                </div>
+                                <div class="col-md-2">
+                                    <input type="number" name="item_quantity[]" class="form-control item-qty"
+                                           placeholder="Qty" value="{{ item.quantity }}" step="0.01" min="0">
+                                </div>
+                                <div class="col-md-3">
+                                    <input type="number" name="item_unit_price[]" class="form-control item-price"
+                                           placeholder="Unit Price" value="{{ item.unit_price }}" step="0.01" min="0">
+                                </div>
+                                <div class="col-md-1">
+                                    <button type="button" class="btn btn-outline-danger w-100 remove-item">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="row g-2 mb-2 item-row">
+                                <div class="col-md-6">
+                                    <input type="text" name="item_description[]" class="form-control"
+                                           placeholder="Description (e.g., Monthly Retainer Fee)" required>
+                                </div>
+                                <div class="col-md-2">
+                                    <input type="number" name="item_quantity[]" class="form-control item-qty"
+                                           placeholder="Qty" value="1" step="0.01" min="0">
+                                </div>
+                                <div class="col-md-3">
+                                    <input type="number" name="item_unit_price[]" class="form-control item-price"
+                                           placeholder="Unit Price" step="0.01" min="0">
+                                </div>
+                                <div class="col-md-1">
+                                    <button type="button" class="btn btn-outline-danger w-100 remove-item">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        {% endif %}
+                    </div>
+                    <button type="button" id="addItem" class="btn btn-outline-primary btn-sm mb-4">
+                        <i class="bi bi-plus-lg me-1"></i> Add Item
+                    </button>
+
+                    <!-- Tax & Discount -->
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label class="form-label">Tax Rate (%)</label>
+                            <input type="number" name="tax_rate" id="taxRate" class="form-control"
+                                   value="{{ recurring.tax_rate if recurring else 0 }}" step="0.01" min="0" max="100">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Discount Amount</label>
+                            <input type="number" name="discount_amount" id="discountAmount" class="form-control"
+                                   value="{{ recurring.discount_amount if recurring else 0 }}" step="0.01" min="0">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Template</label>
+                            <select name="template" class="form-select">
+                                <option value="modern" {{ 'selected' if recurring and recurring.template == 'modern' }}>Modern</option>
+                                <option value="classic" {{ 'selected' if recurring and recurring.template == 'classic' }}>Classic</option>
+                                <option value="minimal" {{ 'selected' if recurring and recurring.template == 'minimal' }}>Minimal</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Totals Preview -->
+                    <div class="card bg-light mb-4">
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6 offset-md-6">
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Subtotal:</span>
+                                        <span id="subtotal">$0.00</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Tax:</span>
+                                        <span id="taxAmount">$0.00</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Discount:</span>
+                                        <span id="discountDisplay">-$0.00</span>
+                                    </div>
+                                    <hr>
+                                    <div class="d-flex justify-content-between fw-bold fs-5">
+                                        <span>Total per Invoice:</span>
+                                        <span id="total">$0.00</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Notes & Terms -->
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label">Notes</label>
+                            <textarea name="notes" class="form-control" rows="3"
+                                      placeholder="Notes for the client (payment instructions, thank you message, etc.)">{{ recurring.notes if recurring else current_user.default_notes or '' }}</textarea>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Terms & Conditions</label>
+                            <textarea name="terms" class="form-control" rows="3"
+                                      placeholder="Payment terms, late fees policy, etc.">{{ recurring.terms if recurring else '' }}</textarea>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg me-1"></i> {{ 'Update' if recurring else 'Create' }} Recurring Invoice
+                        </button>
+                        <a href="{{ url_for('recurring_invoices') }}" class="btn btn-outline-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const itemsContainer = document.getElementById('invoiceItems');
+    const addItemBtn = document.getElementById('addItem');
+
+    // Add new item row
+    addItemBtn.addEventListener('click', function() {
+        const newRow = document.createElement('div');
+        newRow.className = 'row g-2 mb-2 item-row';
+        newRow.innerHTML = `
+            <div class="col-md-6">
+                <input type="text" name="item_description[]" class="form-control" placeholder="Description" required>
+            </div>
+            <div class="col-md-2">
+                <input type="number" name="item_quantity[]" class="form-control item-qty" placeholder="Qty" value="1" step="0.01" min="0">
+            </div>
+            <div class="col-md-3">
+                <input type="number" name="item_unit_price[]" class="form-control item-price" placeholder="Unit Price" step="0.01" min="0">
+            </div>
+            <div class="col-md-1">
+                <button type="button" class="btn btn-outline-danger w-100 remove-item">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+        `;
+        itemsContainer.appendChild(newRow);
+        calculateTotals();
+    });
+
+    // Remove item row
+    itemsContainer.addEventListener('click', function(e) {
+        if (e.target.closest('.remove-item')) {
+            const rows = itemsContainer.querySelectorAll('.item-row');
+            if (rows.length > 1) {
+                e.target.closest('.item-row').remove();
+                calculateTotals();
+            }
+        }
+    });
+
+    // Calculate totals on input change
+    document.addEventListener('input', function(e) {
+        if (e.target.classList.contains('item-qty') ||
+            e.target.classList.contains('item-price') ||
+            e.target.id === 'taxRate' ||
+            e.target.id === 'discountAmount') {
+            calculateTotals();
+        }
+    });
+
+    function calculateTotals() {
+        let subtotal = 0;
+        const rows = itemsContainer.querySelectorAll('.item-row');
+
+        rows.forEach(row => {
+            const qty = parseFloat(row.querySelector('.item-qty').value) || 0;
+            const price = parseFloat(row.querySelector('.item-price').value) || 0;
+            subtotal += qty * price;
+        });
+
+        const taxRate = parseFloat(document.getElementById('taxRate').value) || 0;
+        const discount = parseFloat(document.getElementById('discountAmount').value) || 0;
+        const taxAmount = subtotal * (taxRate / 100);
+        const total = subtotal + taxAmount - discount;
+
+        document.getElementById('subtotal').textContent = '$' + subtotal.toFixed(2);
+        document.getElementById('taxAmount').textContent = '$' + taxAmount.toFixed(2);
+        document.getElementById('discountDisplay').textContent = '-$' + discount.toFixed(2);
+        document.getElementById('total').textContent = '$' + total.toFixed(2);
+    }
+
+    // Initial calculation
+    calculateTotals();
+});
+</script>
+{% endblock %}

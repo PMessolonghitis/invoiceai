@@ -154,6 +154,149 @@ class InvoiceItem(db.Model):
         self.total = self.quantity * self.unit_price
 
 
+class RecurringInvoice(db.Model):
+    """Template for recurring invoices that auto-generate on schedule"""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+
+    name = db.Column(db.String(100), nullable=False)  # Friendly name for the recurring invoice
+    status = db.Column(db.String(20), default='active')  # active, paused, cancelled
+
+    # Schedule
+    frequency = db.Column(db.String(20), nullable=False)  # weekly, monthly, quarterly, yearly
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date)  # Optional end date
+    next_invoice_date = db.Column(db.Date, nullable=False)
+    last_generated = db.Column(db.Date)
+
+    # Invoice template data
+    currency = db.Column(db.String(3), default='USD')
+    tax_rate = db.Column(db.Float, default=0)
+    discount_amount = db.Column(db.Float, default=0)
+    notes = db.Column(db.Text)
+    terms = db.Column(db.Text)
+    payment_terms_days = db.Column(db.Integer, default=30)
+    template = db.Column(db.String(20), default='modern')
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    user = db.relationship('User', backref=db.backref('recurring_invoices', lazy=True, cascade='all, delete-orphan'))
+    client = db.relationship('Client', backref=db.backref('recurring_invoices', lazy=True))
+    items = db.relationship('RecurringInvoiceItem', backref='recurring_invoice', lazy=True, cascade='all, delete-orphan')
+
+    @property
+    def subtotal(self):
+        return sum(item.total for item in self.items)
+
+    @property
+    def tax_amount(self):
+        return self.subtotal * (self.tax_rate / 100)
+
+    @property
+    def total(self):
+        return self.subtotal + self.tax_amount - self.discount_amount
+
+    def calculate_next_date(self, from_date=None):
+        """Calculate the next invoice date based on frequency"""
+        base_date = from_date or self.next_invoice_date
+        if self.frequency == 'weekly':
+            return base_date + timedelta(weeks=1)
+        elif self.frequency == 'monthly':
+            return base_date + relativedelta(months=1)
+        elif self.frequency == 'quarterly':
+            return base_date + relativedelta(months=3)
+        elif self.frequency == 'yearly':
+            return base_date + relativedelta(years=1)
+        return base_date + relativedelta(months=1)  # Default to monthly
+
+
+class RecurringInvoiceItem(db.Model):
+    """Line items for recurring invoice template"""
+    id = db.Column(db.Integer, primary_key=True)
+    recurring_invoice_id = db.Column(db.Integer, db.ForeignKey('recurring_invoice.id'), nullable=False)
+
+    description = db.Column(db.String(500), nullable=False)
+    quantity = db.Column(db.Float, default=1)
+    unit_price = db.Column(db.Float, default=0)
+    total = db.Column(db.Float, default=0)
+
+    def calculate_total(self):
+        self.total = self.quantity * self.unit_price
+
+
+class Estimate(db.Model):
+    """Estimates/Quotes that can be converted to invoices"""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+
+    estimate_number = db.Column(db.String(50), nullable=False)
+    status = db.Column(db.String(20), default='draft')  # draft, sent, accepted, declined, expired, converted
+
+    # Dates
+    issue_date = db.Column(db.Date, nullable=False, default=datetime.utcnow)
+    valid_until = db.Column(db.Date, nullable=False)
+
+    # Financial
+    currency = db.Column(db.String(3), default='USD')
+    subtotal = db.Column(db.Float, default=0)
+    tax_rate = db.Column(db.Float, default=0)
+    tax_amount = db.Column(db.Float, default=0)
+    discount_amount = db.Column(db.Float, default=0)
+    total = db.Column(db.Float, default=0)
+
+    # Content
+    title = db.Column(db.String(200))
+    notes = db.Column(db.Text)
+    terms = db.Column(db.Text)
+
+    # Template
+    template = db.Column(db.String(20), default='modern')
+
+    # Tracking
+    view_count = db.Column(db.Integer, default=0)
+    public_link = db.Column(db.String(100), unique=True)
+
+    # Conversion tracking
+    converted_invoice_id = db.Column(db.Integer, db.ForeignKey('invoice.id'))
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    user = db.relationship('User', backref=db.backref('estimates', lazy=True, cascade='all, delete-orphan'))
+    client = db.relationship('Client', backref=db.backref('estimates', lazy=True))
+    items = db.relationship('EstimateItem', backref='estimate', lazy=True, cascade='all, delete-orphan')
+    converted_invoice = db.relationship('Invoice', backref='source_estimate', foreign_keys=[converted_invoice_id])
+
+    def calculate_totals(self):
+        """Recalculate estimate totals"""
+        self.subtotal = sum(item.total for item in self.items)
+        self.tax_amount = self.subtotal * (self.tax_rate / 100)
+        self.total = self.subtotal + self.tax_amount - self.discount_amount
+
+    def generate_public_link(self):
+        """Generate a unique public link for the estimate"""
+        self.public_link = str(uuid.uuid4())
+
+
+class EstimateItem(db.Model):
+    """Line items for estimates"""
+    id = db.Column(db.Integer, primary_key=True)
+    estimate_id = db.Column(db.Integer, db.ForeignKey('estimate.id'), nullable=False)
+
+    description = db.Column(db.String(500), nullable=False)
+    quantity = db.Column(db.Float, default=1)
+    unit_price = db.Column(db.Float, default=0)
+    total = db.Column(db.Float, default=0)
+
+    def calculate_total(self):
+        self.total = self.quantity * self.unit_price
+
+
 # =============================================================================
 # AUTHENTICATION
 # =============================================================================
@@ -250,6 +393,11 @@ def index():
 @app.route('/dashboard')
 @login_required
 def dashboard():
+    # Process any due recurring invoices
+    generated_count = process_recurring_invoices()
+    if generated_count > 0:
+        flash(f'{generated_count} recurring invoice(s) auto-generated', 'info')
+
     # Get statistics
     total_invoices = Invoice.query.filter_by(user_id=current_user.id).count()
     paid_invoices = Invoice.query.filter_by(user_id=current_user.id, status='paid').count()
@@ -257,6 +405,9 @@ def dashboard():
         Invoice.user_id == current_user.id,
         Invoice.status.in_(['sent', 'overdue'])
     ).scalar() or 0
+
+    # Recurring invoice stats
+    active_recurring = RecurringInvoice.query.filter_by(user_id=current_user.id, status='active').count()
 
     # Recent invoices
     recent_invoices = Invoice.query.filter_by(user_id=current_user.id).order_by(
@@ -270,7 +421,8 @@ def dashboard():
         total_invoices=total_invoices,
         paid_invoices=paid_invoices,
         pending_amount=pending_amount,
-        recent_invoices=recent_invoices
+        recent_invoices=recent_invoices,
+        active_recurring=active_recurring
     )
 
 
@@ -665,6 +817,632 @@ def settings():
         return redirect(url_for('settings'))
 
     return render_template('settings.html')
+
+
+# =============================================================================
+# ESTIMATES / QUOTES
+# =============================================================================
+
+def generate_next_estimate_number(user_id):
+    """Generate the next auto estimate number for a user"""
+    last_estimate = Estimate.query.filter_by(user_id=user_id).order_by(Estimate.id.desc()).first()
+    if last_estimate:
+        try:
+            last_num = int(last_estimate.estimate_number.split('-')[-1])
+            new_num = last_num + 1
+        except:
+            new_num = 1
+    else:
+        new_num = 1
+    return f"EST-{datetime.utcnow().strftime('%Y%m')}-{new_num:04d}"
+
+
+@app.route('/estimates')
+@login_required
+def estimates():
+    """List all estimates"""
+    status_filter = request.args.get('status', 'all')
+
+    query = Estimate.query.filter_by(user_id=current_user.id)
+
+    if status_filter != 'all':
+        query = query.filter_by(status=status_filter)
+
+    estimates_list = query.order_by(Estimate.created_at.desc()).all()
+
+    # Check for expired estimates
+    today = datetime.utcnow().date()
+    for est in estimates_list:
+        if est.status in ['draft', 'sent'] and est.valid_until < today:
+            est.status = 'expired'
+    db.session.commit()
+
+    return render_template('estimates.html', estimates=estimates_list, status_filter=status_filter)
+
+
+@app.route('/estimates/new', methods=['GET', 'POST'])
+@login_required
+def new_estimate():
+    """Create a new estimate"""
+    clients = Client.query.filter_by(user_id=current_user.id).order_by(Client.name).all()
+
+    if request.method == 'POST':
+        data = request.form
+
+        estimate_number = data.get('estimate_number', '').strip()
+        if not estimate_number:
+            estimate_number = generate_next_estimate_number(current_user.id)
+
+        estimate = Estimate(
+            user_id=current_user.id,
+            client_id=int(data['client_id']),
+            estimate_number=estimate_number,
+            title=data.get('title', ''),
+            issue_date=datetime.strptime(data['issue_date'], '%Y-%m-%d').date(),
+            valid_until=datetime.strptime(data['valid_until'], '%Y-%m-%d').date(),
+            currency=data.get('currency', current_user.default_currency),
+            tax_rate=float(data.get('tax_rate', 0)),
+            discount_amount=float(data.get('discount_amount', 0)),
+            notes=data.get('notes', ''),
+            terms=data.get('terms', ''),
+            template=data.get('template', 'modern')
+        )
+        estimate.generate_public_link()
+
+        db.session.add(estimate)
+        db.session.flush()
+
+        # Add items
+        descriptions = request.form.getlist('item_description[]')
+        quantities = request.form.getlist('item_quantity[]')
+        unit_prices = request.form.getlist('item_unit_price[]')
+
+        for i, desc in enumerate(descriptions):
+            if desc.strip():
+                item = EstimateItem(
+                    estimate_id=estimate.id,
+                    description=desc,
+                    quantity=float(quantities[i]) if quantities[i] else 1,
+                    unit_price=float(unit_prices[i]) if unit_prices[i] else 0
+                )
+                item.calculate_total()
+                db.session.add(item)
+
+        estimate.calculate_totals()
+        db.session.commit()
+
+        flash('Estimate created successfully', 'success')
+        return redirect(url_for('view_estimate', estimate_id=estimate.id))
+
+    today = datetime.utcnow().date()
+    valid_until = today + timedelta(days=30)
+    next_estimate_number = generate_next_estimate_number(current_user.id)
+
+    return render_template('estimate_form.html',
+        estimate=None,
+        clients=clients,
+        today=today,
+        valid_until=valid_until,
+        next_estimate_number=next_estimate_number
+    )
+
+
+@app.route('/estimates/<int:estimate_id>')
+@login_required
+def view_estimate(estimate_id):
+    """View estimate details"""
+    estimate = Estimate.query.filter_by(id=estimate_id, user_id=current_user.id).first_or_404()
+    return render_template('estimate_view.html', estimate=estimate)
+
+
+@app.route('/estimates/<int:estimate_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_estimate(estimate_id):
+    """Edit an estimate"""
+    estimate = Estimate.query.filter_by(id=estimate_id, user_id=current_user.id).first_or_404()
+    clients = Client.query.filter_by(user_id=current_user.id).order_by(Client.name).all()
+
+    if request.method == 'POST':
+        data = request.form
+
+        new_estimate_number = data.get('estimate_number', '').strip()
+        if new_estimate_number:
+            estimate.estimate_number = new_estimate_number
+
+        estimate.client_id = int(data['client_id'])
+        estimate.title = data.get('title', '')
+        estimate.issue_date = datetime.strptime(data['issue_date'], '%Y-%m-%d').date()
+        estimate.valid_until = datetime.strptime(data['valid_until'], '%Y-%m-%d').date()
+        estimate.currency = data.get('currency', 'USD')
+        estimate.tax_rate = float(data.get('tax_rate', 0))
+        estimate.discount_amount = float(data.get('discount_amount', 0))
+        estimate.notes = data.get('notes', '')
+        estimate.terms = data.get('terms', '')
+        estimate.template = data.get('template', 'modern')
+
+        # Remove old items
+        EstimateItem.query.filter_by(estimate_id=estimate.id).delete()
+
+        # Add new items
+        descriptions = request.form.getlist('item_description[]')
+        quantities = request.form.getlist('item_quantity[]')
+        unit_prices = request.form.getlist('item_unit_price[]')
+
+        for i, desc in enumerate(descriptions):
+            if desc.strip():
+                item = EstimateItem(
+                    estimate_id=estimate.id,
+                    description=desc,
+                    quantity=float(quantities[i]) if quantities[i] else 1,
+                    unit_price=float(unit_prices[i]) if unit_prices[i] else 0
+                )
+                item.calculate_total()
+                db.session.add(item)
+
+        estimate.calculate_totals()
+        db.session.commit()
+
+        flash('Estimate updated successfully', 'success')
+        return redirect(url_for('view_estimate', estimate_id=estimate.id))
+
+    return render_template('estimate_form.html',
+        estimate=estimate,
+        clients=clients,
+        next_estimate_number=estimate.estimate_number
+    )
+
+
+@app.route('/estimates/<int:estimate_id>/delete', methods=['POST'])
+@login_required
+def delete_estimate(estimate_id):
+    """Delete an estimate"""
+    estimate = Estimate.query.filter_by(id=estimate_id, user_id=current_user.id).first_or_404()
+    db.session.delete(estimate)
+    db.session.commit()
+    flash('Estimate deleted', 'success')
+    return redirect(url_for('estimates'))
+
+
+@app.route('/estimates/<int:estimate_id>/status', methods=['POST'])
+@login_required
+def update_estimate_status(estimate_id):
+    """Update estimate status"""
+    estimate = Estimate.query.filter_by(id=estimate_id, user_id=current_user.id).first_or_404()
+    new_status = request.form.get('status')
+
+    if new_status in ['draft', 'sent', 'accepted', 'declined', 'expired']:
+        estimate.status = new_status
+        db.session.commit()
+        flash(f'Estimate marked as {new_status}', 'success')
+
+    return redirect(url_for('view_estimate', estimate_id=estimate.id))
+
+
+@app.route('/estimates/<int:estimate_id>/convert', methods=['POST'])
+@login_required
+def convert_estimate_to_invoice(estimate_id):
+    """Convert an estimate to an invoice"""
+    estimate = Estimate.query.filter_by(id=estimate_id, user_id=current_user.id).first_or_404()
+
+    if estimate.status == 'converted':
+        flash('This estimate has already been converted to an invoice', 'warning')
+        return redirect(url_for('view_estimate', estimate_id=estimate.id))
+
+    # Generate invoice number
+    invoice_number = generate_next_invoice_number(current_user.id)
+
+    # Create invoice from estimate
+    today = datetime.utcnow().date()
+    invoice = Invoice(
+        user_id=current_user.id,
+        client_id=estimate.client_id,
+        invoice_number=invoice_number,
+        status='draft',
+        issue_date=today,
+        due_date=today + timedelta(days=current_user.default_payment_terms),
+        currency=estimate.currency,
+        tax_rate=estimate.tax_rate,
+        discount_amount=estimate.discount_amount,
+        notes=f'[Converted from Estimate: {estimate.estimate_number}]\n{estimate.notes}' if estimate.notes else f'[Converted from Estimate: {estimate.estimate_number}]',
+        terms=estimate.terms,
+        template=estimate.template
+    )
+    invoice.generate_public_link()
+
+    db.session.add(invoice)
+    db.session.flush()
+
+    # Copy items
+    for item in estimate.items:
+        new_item = InvoiceItem(
+            invoice_id=invoice.id,
+            description=item.description,
+            quantity=item.quantity,
+            unit_price=item.unit_price,
+            total=item.total
+        )
+        db.session.add(new_item)
+
+    invoice.calculate_totals()
+
+    # Update estimate
+    estimate.status = 'converted'
+    estimate.converted_invoice_id = invoice.id
+
+    db.session.commit()
+
+    flash(f'Estimate converted to Invoice {invoice.invoice_number}', 'success')
+    return redirect(url_for('view_invoice', invoice_id=invoice.id))
+
+
+@app.route('/estimates/<int:estimate_id>/duplicate', methods=['POST'])
+@login_required
+def duplicate_estimate(estimate_id):
+    """Duplicate an estimate"""
+    original = Estimate.query.filter_by(id=estimate_id, user_id=current_user.id).first_or_404()
+
+    estimate_number = generate_next_estimate_number(current_user.id)
+
+    new_estimate = Estimate(
+        user_id=current_user.id,
+        client_id=original.client_id,
+        estimate_number=estimate_number,
+        title=original.title,
+        status='draft',
+        issue_date=datetime.utcnow().date(),
+        valid_until=datetime.utcnow().date() + timedelta(days=30),
+        currency=original.currency,
+        tax_rate=original.tax_rate,
+        discount_amount=original.discount_amount,
+        notes=original.notes,
+        terms=original.terms,
+        template=original.template
+    )
+    new_estimate.generate_public_link()
+
+    db.session.add(new_estimate)
+    db.session.flush()
+
+    # Copy items
+    for item in original.items:
+        new_item = EstimateItem(
+            estimate_id=new_estimate.id,
+            description=item.description,
+            quantity=item.quantity,
+            unit_price=item.unit_price,
+            total=item.total
+        )
+        db.session.add(new_item)
+
+    new_estimate.calculate_totals()
+    db.session.commit()
+
+    flash('Estimate duplicated successfully', 'success')
+    return redirect(url_for('edit_estimate', estimate_id=new_estimate.id))
+
+
+@app.route('/e/<public_link>')
+def public_estimate(public_link):
+    """Public view of an estimate"""
+    estimate = Estimate.query.filter_by(public_link=public_link).first_or_404()
+    estimate.view_count += 1
+    db.session.commit()
+    return render_template('estimate_public.html', estimate=estimate)
+
+
+@app.route('/estimates/<int:estimate_id>/pdf')
+@login_required
+def download_estimate_pdf(estimate_id):
+    """Download estimate as PDF"""
+    estimate = Estimate.query.filter_by(id=estimate_id, user_id=current_user.id).first_or_404()
+
+    html = render_template('estimate_pdf.html', estimate=estimate)
+
+    try:
+        from xhtml2pdf import pisa
+        from io import BytesIO
+
+        pdf_buffer = BytesIO()
+        pisa_status = pisa.CreatePDF(html, dest=pdf_buffer)
+
+        if pisa_status.err:
+            flash('PDF generation failed', 'error')
+            return redirect(url_for('view_estimate', estimate_id=estimate.id))
+
+        pdf_buffer.seek(0)
+
+        return send_file(
+            pdf_buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=f'{estimate.estimate_number}.pdf'
+        )
+    except Exception as e:
+        flash(f'PDF generation failed: {str(e)}', 'error')
+        return redirect(url_for('view_estimate', estimate_id=estimate.id))
+
+
+# =============================================================================
+# RECURRING INVOICES
+# =============================================================================
+
+@app.route('/recurring')
+@login_required
+def recurring_invoices():
+    """List all recurring invoices"""
+    recurring = RecurringInvoice.query.filter_by(user_id=current_user.id).order_by(
+        RecurringInvoice.next_invoice_date
+    ).all()
+    return render_template('recurring_invoices.html', recurring_invoices=recurring)
+
+
+@app.route('/recurring/new', methods=['GET', 'POST'])
+@login_required
+def new_recurring_invoice():
+    """Create a new recurring invoice"""
+    clients = Client.query.filter_by(user_id=current_user.id).order_by(Client.name).all()
+
+    if request.method == 'POST':
+        data = request.form
+
+        recurring = RecurringInvoice(
+            user_id=current_user.id,
+            client_id=int(data['client_id']),
+            name=data['name'],
+            frequency=data['frequency'],
+            start_date=datetime.strptime(data['start_date'], '%Y-%m-%d').date(),
+            next_invoice_date=datetime.strptime(data['start_date'], '%Y-%m-%d').date(),
+            end_date=datetime.strptime(data['end_date'], '%Y-%m-%d').date() if data.get('end_date') else None,
+            currency=data.get('currency', current_user.default_currency),
+            tax_rate=float(data.get('tax_rate', 0)),
+            discount_amount=float(data.get('discount_amount', 0)),
+            notes=data.get('notes', ''),
+            terms=data.get('terms', ''),
+            payment_terms_days=int(data.get('payment_terms_days', current_user.default_payment_terms)),
+            template=data.get('template', 'modern')
+        )
+
+        db.session.add(recurring)
+        db.session.flush()
+
+        # Add items
+        descriptions = request.form.getlist('item_description[]')
+        quantities = request.form.getlist('item_quantity[]')
+        unit_prices = request.form.getlist('item_unit_price[]')
+
+        for i, desc in enumerate(descriptions):
+            if desc.strip():
+                item = RecurringInvoiceItem(
+                    recurring_invoice_id=recurring.id,
+                    description=desc,
+                    quantity=float(quantities[i]) if quantities[i] else 1,
+                    unit_price=float(unit_prices[i]) if unit_prices[i] else 0
+                )
+                item.calculate_total()
+                db.session.add(item)
+
+        db.session.commit()
+        flash('Recurring invoice created successfully', 'success')
+        return redirect(url_for('recurring_invoices'))
+
+    today = datetime.utcnow().date()
+    return render_template('recurring_form.html',
+        recurring=None,
+        clients=clients,
+        today=today
+    )
+
+
+@app.route('/recurring/<int:recurring_id>')
+@login_required
+def view_recurring_invoice(recurring_id):
+    """View recurring invoice details"""
+    recurring = RecurringInvoice.query.filter_by(id=recurring_id, user_id=current_user.id).first_or_404()
+    # Get invoices generated from this recurring template
+    generated_invoices = Invoice.query.filter_by(
+        user_id=current_user.id,
+        client_id=recurring.client_id
+    ).filter(
+        Invoice.notes.contains(f'[Recurring: {recurring.name}]')
+    ).order_by(Invoice.created_at.desc()).limit(10).all()
+
+    return render_template('recurring_view.html', recurring=recurring, generated_invoices=generated_invoices)
+
+
+@app.route('/recurring/<int:recurring_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_recurring_invoice(recurring_id):
+    """Edit a recurring invoice"""
+    recurring = RecurringInvoice.query.filter_by(id=recurring_id, user_id=current_user.id).first_or_404()
+    clients = Client.query.filter_by(user_id=current_user.id).order_by(Client.name).all()
+
+    if request.method == 'POST':
+        data = request.form
+
+        recurring.client_id = int(data['client_id'])
+        recurring.name = data['name']
+        recurring.frequency = data['frequency']
+        recurring.start_date = datetime.strptime(data['start_date'], '%Y-%m-%d').date()
+        recurring.end_date = datetime.strptime(data['end_date'], '%Y-%m-%d').date() if data.get('end_date') else None
+        recurring.currency = data.get('currency', 'USD')
+        recurring.tax_rate = float(data.get('tax_rate', 0))
+        recurring.discount_amount = float(data.get('discount_amount', 0))
+        recurring.notes = data.get('notes', '')
+        recurring.terms = data.get('terms', '')
+        recurring.payment_terms_days = int(data.get('payment_terms_days', 30))
+        recurring.template = data.get('template', 'modern')
+
+        # Remove old items
+        RecurringInvoiceItem.query.filter_by(recurring_invoice_id=recurring.id).delete()
+
+        # Add new items
+        descriptions = request.form.getlist('item_description[]')
+        quantities = request.form.getlist('item_quantity[]')
+        unit_prices = request.form.getlist('item_unit_price[]')
+
+        for i, desc in enumerate(descriptions):
+            if desc.strip():
+                item = RecurringInvoiceItem(
+                    recurring_invoice_id=recurring.id,
+                    description=desc,
+                    quantity=float(quantities[i]) if quantities[i] else 1,
+                    unit_price=float(unit_prices[i]) if unit_prices[i] else 0
+                )
+                item.calculate_total()
+                db.session.add(item)
+
+        db.session.commit()
+        flash('Recurring invoice updated successfully', 'success')
+        return redirect(url_for('view_recurring_invoice', recurring_id=recurring.id))
+
+    return render_template('recurring_form.html',
+        recurring=recurring,
+        clients=clients,
+        today=datetime.utcnow().date()
+    )
+
+
+@app.route('/recurring/<int:recurring_id>/delete', methods=['POST'])
+@login_required
+def delete_recurring_invoice(recurring_id):
+    """Delete a recurring invoice"""
+    recurring = RecurringInvoice.query.filter_by(id=recurring_id, user_id=current_user.id).first_or_404()
+    db.session.delete(recurring)
+    db.session.commit()
+    flash('Recurring invoice deleted', 'success')
+    return redirect(url_for('recurring_invoices'))
+
+
+@app.route('/recurring/<int:recurring_id>/toggle', methods=['POST'])
+@login_required
+def toggle_recurring_invoice(recurring_id):
+    """Pause or resume a recurring invoice"""
+    recurring = RecurringInvoice.query.filter_by(id=recurring_id, user_id=current_user.id).first_or_404()
+
+    if recurring.status == 'active':
+        recurring.status = 'paused'
+        flash('Recurring invoice paused', 'success')
+    else:
+        recurring.status = 'active'
+        flash('Recurring invoice resumed', 'success')
+
+    db.session.commit()
+    return redirect(url_for('view_recurring_invoice', recurring_id=recurring.id))
+
+
+@app.route('/recurring/<int:recurring_id>/generate', methods=['POST'])
+@login_required
+def generate_invoice_from_recurring(recurring_id):
+    """Manually generate an invoice from recurring template"""
+    recurring = RecurringInvoice.query.filter_by(id=recurring_id, user_id=current_user.id).first_or_404()
+
+    # Generate invoice number
+    invoice_number = generate_next_invoice_number(current_user.id)
+
+    # Create the invoice
+    today = datetime.utcnow().date()
+    invoice = Invoice(
+        user_id=current_user.id,
+        client_id=recurring.client_id,
+        invoice_number=invoice_number,
+        status='draft',
+        issue_date=today,
+        due_date=today + timedelta(days=recurring.payment_terms_days),
+        currency=recurring.currency,
+        tax_rate=recurring.tax_rate,
+        discount_amount=recurring.discount_amount,
+        notes=f'[Recurring: {recurring.name}]\n{recurring.notes}' if recurring.notes else f'[Recurring: {recurring.name}]',
+        terms=recurring.terms,
+        template=recurring.template
+    )
+    invoice.generate_public_link()
+
+    db.session.add(invoice)
+    db.session.flush()
+
+    # Copy items
+    for item in recurring.items:
+        new_item = InvoiceItem(
+            invoice_id=invoice.id,
+            description=item.description,
+            quantity=item.quantity,
+            unit_price=item.unit_price,
+            total=item.total
+        )
+        db.session.add(new_item)
+
+    invoice.calculate_totals()
+
+    # Update recurring invoice
+    recurring.last_generated = today
+    recurring.next_invoice_date = recurring.calculate_next_date(today)
+
+    db.session.commit()
+
+    flash(f'Invoice {invoice.invoice_number} generated successfully', 'success')
+    return redirect(url_for('view_invoice', invoice_id=invoice.id))
+
+
+def process_recurring_invoices():
+    """Process all due recurring invoices - called on dashboard load"""
+    today = datetime.utcnow().date()
+
+    due_recurring = RecurringInvoice.query.filter(
+        RecurringInvoice.status == 'active',
+        RecurringInvoice.next_invoice_date <= today,
+        db.or_(
+            RecurringInvoice.end_date == None,
+            RecurringInvoice.end_date >= today
+        )
+    ).all()
+
+    generated_count = 0
+    for recurring in due_recurring:
+        # Generate invoice
+        invoice_number = generate_next_invoice_number(recurring.user_id)
+
+        invoice = Invoice(
+            user_id=recurring.user_id,
+            client_id=recurring.client_id,
+            invoice_number=invoice_number,
+            status='draft',
+            issue_date=today,
+            due_date=today + timedelta(days=recurring.payment_terms_days),
+            currency=recurring.currency,
+            tax_rate=recurring.tax_rate,
+            discount_amount=recurring.discount_amount,
+            notes=f'[Recurring: {recurring.name}]\n{recurring.notes}' if recurring.notes else f'[Recurring: {recurring.name}]',
+            terms=recurring.terms,
+            template=recurring.template
+        )
+        invoice.generate_public_link()
+
+        db.session.add(invoice)
+        db.session.flush()
+
+        # Copy items
+        for item in recurring.items:
+            new_item = InvoiceItem(
+                invoice_id=invoice.id,
+                description=item.description,
+                quantity=item.quantity,
+                unit_price=item.unit_price,
+                total=item.total
+            )
+            db.session.add(new_item)
+
+        invoice.calculate_totals()
+
+        # Update recurring
+        recurring.last_generated = today
+        recurring.next_invoice_date = recurring.calculate_next_date(today)
+
+        generated_count += 1
+
+    if generated_count > 0:
+        db.session.commit()
+
+    return generated_count
 
 
 # =============================================================================

@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Estimate {{ estimate.estimate_number }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 1cm;
+        }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-size: 12px;
+            line-height: 1.5;
+            color: #333;
+        }
+        .container {
+            padding: 20px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 40px;
+        }
+        .header-left h1 {
+            color: #0dcaf0;
+            font-size: 28px;
+            margin-bottom: 5px;
+        }
+        .header-left .title {
+            font-size: 14px;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+        .header-right {
+            text-align: right;
+        }
+        .header-right h2 {
+            font-size: 16px;
+            margin-bottom: 5px;
+        }
+        .addresses {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 40px;
+        }
+        .addresses-right {
+            text-align: right;
+        }
+        .label {
+            color: #666;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .client-name {
+            font-size: 14px;
+            font-weight: bold;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+        }
+        th {
+            text-align: left;
+            padding: 10px;
+            border-bottom: 2px solid #ddd;
+            font-weight: bold;
+        }
+        th.text-center { text-align: center; }
+        th.text-right { text-align: right; }
+        td {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        td.text-center { text-align: center; }
+        td.text-right { text-align: right; }
+        .totals-section {
+            display: flex;
+            justify-content: flex-end;
+        }
+        .totals {
+            width: 250px;
+        }
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+        }
+        .total-row.final {
+            border-top: 2px solid #333;
+            margin-top: 10px;
+            padding-top: 10px;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .total-row.final .amount {
+            color: #0dcaf0;
+        }
+        .notes-section {
+            margin-top: 40px;
+        }
+        .notes-section h4 {
+            color: #666;
+            margin-bottom: 5px;
+        }
+        .notes-section p {
+            white-space: pre-line;
+        }
+        .status-accepted {
+            background: #d4edda;
+            color: #155724;
+            padding: 10px 20px;
+            text-align: center;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        .status-expired {
+            background: #fff3cd;
+            color: #856404;
+            padding: 10px 20px;
+            text-align: center;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        .status-declined {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 10px 20px;
+            text-align: center;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        .status-converted {
+            background: #cce5ff;
+            color: #004085;
+            padding: 10px 20px;
+            text-align: center;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        {% if estimate.status == 'accepted' %}
+        <div class="status-accepted">ACCEPTED</div>
+        {% elif estimate.status == 'expired' %}
+        <div class="status-expired">EXPIRED</div>
+        {% elif estimate.status == 'declined' %}
+        <div class="status-declined">DECLINED</div>
+        {% elif estimate.status == 'converted' %}
+        <div class="status-converted">CONVERTED TO INVOICE</div>
+        {% endif %}
+
+        <div class="header">
+            <div class="header-left">
+                <h1>ESTIMATE</h1>
+                <p style="color: #666;">{{ estimate.estimate_number }}</p>
+                {% if estimate.title %}
+                <p class="title">{{ estimate.title }}</p>
+                {% endif %}
+            </div>
+            <div class="header-right">
+                {% if estimate.user.company_name %}
+                <h2>{{ estimate.user.company_name }}</h2>
+                {% endif %}
+                <p>{{ estimate.user.name }}</p>
+                {% if estimate.user.address %}
+                <p style="color: #666; white-space: pre-line;">{{ estimate.user.address }}</p>
+                {% endif %}
+                {% if estimate.user.email %}
+                <p>{{ estimate.user.email }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="addresses">
+            <div class="addresses-left">
+                <p class="label">Prepared For:</p>
+                <p class="client-name">{{ estimate.client.name }}</p>
+                {% if estimate.client.company_name %}
+                <p>{{ estimate.client.company_name }}</p>
+                {% endif %}
+                {% if estimate.client.address %}
+                <p style="color: #666; white-space: pre-line;">{{ estimate.client.address }}</p>
+                {% endif %}
+            </div>
+            <div class="addresses-right">
+                <p><strong>Issue Date:</strong> {{ estimate.issue_date.strftime('%B %d, %Y') }}</p>
+                <p><strong>Valid Until:</strong> {{ estimate.valid_until.strftime('%B %d, %Y') }}</p>
+            </div>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Description</th>
+                    <th class="text-center" style="width: 80px;">Qty</th>
+                    <th class="text-right" style="width: 100px;">Unit Price</th>
+                    <th class="text-right" style="width: 100px;">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in estimate.items %}
+                <tr>
+                    <td>{{ item.description }}</td>
+                    <td class="text-center">{{ item.quantity }}</td>
+                    <td class="text-right">{{ estimate.currency }} {{ "%.2f"|format(item.unit_price) }}</td>
+                    <td class="text-right">{{ estimate.currency }} {{ "%.2f"|format(item.total) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="totals-section">
+            <div class="totals">
+                <div class="total-row">
+                    <span>Subtotal:</span>
+                    <span>{{ estimate.currency }} {{ "%.2f"|format(estimate.subtotal) }}</span>
+                </div>
+                {% if estimate.tax_rate > 0 %}
+                <div class="total-row">
+                    <span>Tax ({{ estimate.tax_rate }}%):</span>
+                    <span>{{ estimate.currency }} {{ "%.2f"|format(estimate.tax_amount) }}</span>
+                </div>
+                {% endif %}
+                {% if estimate.discount_amount > 0 %}
+                <div class="total-row">
+                    <span>Discount:</span>
+                    <span>-{{ estimate.currency }} {{ "%.2f"|format(estimate.discount_amount) }}</span>
+                </div>
+                {% endif %}
+                <div class="total-row final">
+                    <span>Total:</span>
+                    <span class="amount">{{ estimate.currency }} {{ "%.2f"|format(estimate.total) }}</span>
+                </div>
+            </div>
+        </div>
+
+        {% if estimate.notes or estimate.terms %}
+        <div class="notes-section">
+            {% if estimate.notes %}
+            <div style="margin-bottom: 20px;">
+                <h4>Notes:</h4>
+                <p>{{ estimate.notes }}</p>
+            </div>
+            {% endif %}
+            {% if estimate.terms %}
+            <div>
+                <h4>Terms & Conditions:</h4>
+                <p>{{ estimate.terms }}</p>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>
