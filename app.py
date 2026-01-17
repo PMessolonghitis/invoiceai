@@ -734,9 +734,17 @@ def server_error(e):
 # INITIALIZE DATABASE
 # =============================================================================
 
-# Create database tables on startup
-with app.app_context():
-    db.create_all()
+def init_db():
+    """Initialize database tables"""
+    with app.app_context():
+        db.create_all()
+
+# Initialize on first request
+@app.before_request
+def before_request():
+    if not hasattr(app, '_db_initialized'):
+        init_db()
+        app._db_initialized = True
 
 
 # =============================================================================
@@ -744,4 +752,5 @@ with app.app_context():
 # =============================================================================
 
 if __name__ == '__main__':
+    init_db()
     app.run(debug=True, port=5000)
