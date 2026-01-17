@@ -62,8 +62,8 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Loading state for buttons (exclude status buttons which need their value preserved)
-    const forms = document.querySelectorAll('form:not([action*="status"])');
-    forms.forEach(function(form) {
+    const submitForms = document.querySelectorAll('form:not([action*="status"])');
+    submitForms.forEach(function(form) {
         form.addEventListener('submit', function() {
             const button = form.querySelector('button[type="submit"]:not([name="status"])');
             if (button) {

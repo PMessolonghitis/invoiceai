@@ -729,10 +729,9 @@ def server_error(e):
 # INITIALIZE DATABASE
 # =============================================================================
 
-def init_db():
-    with app.app_context():
-        db.create_all()
-        print("Database initialized successfully!")
+# Create database tables on startup
+with app.app_context():
+    db.create_all()
 
 
 # =============================================================================
@@ -740,5 +739,4 @@ def init_db():
 # =============================================================================
 
 if __name__ == '__main__':
-    init_db()
     app.run(debug=True, port=5000)
