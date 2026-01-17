@@ -1,0 +1,310 @@
+{% extends "base.html" %}
+
+{% block title %}Reports & Analytics{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">Reports & Analytics</h2>
+</div>
+
+<!-- Revenue Overview -->
+<div class="row g-4 mb-4">
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <div class="bg-success bg-opacity-10 rounded-3 p-3">
+                            <i class="bi bi-currency-dollar text-success fs-4"></i>
+                        </div>
+                    </div>
+                    <div class="ms-3">
+                        <h3 class="mb-0">${{ "%.2f"|format(total_revenue) }}</h3>
+                        <p class="text-muted mb-0 small">Total Revenue</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <div class="bg-primary bg-opacity-10 rounded-3 p-3">
+                            <i class="bi bi-calendar-month text-primary fs-4"></i>
+                        </div>
+                    </div>
+                    <div class="ms-3">
+                        <h3 class="mb-0">${{ "%.2f"|format(this_month_revenue) }}</h3>
+                        <p class="text-muted mb-0 small">This Month</p>
+                        {% if last_month_revenue > 0 %}
+                        {% set change = ((this_month_revenue - last_month_revenue) / last_month_revenue * 100) %}
+                        <small class="{{ 'text-success' if change >= 0 else 'text-danger' }}">
+                            <i class="bi {{ 'bi-arrow-up' if change >= 0 else 'bi-arrow-down' }}"></i>
+                            {{ "%.1f"|format(change|abs) }}% vs last month
+                        </small>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <div class="bg-warning bg-opacity-10 rounded-3 p-3">
+                            <i class="bi bi-clock text-warning fs-4"></i>
+                        </div>
+                    </div>
+                    <div class="ms-3">
+                        <h3 class="mb-0">${{ "%.2f"|format(outstanding_amount) }}</h3>
+                        <p class="text-muted mb-0 small">Outstanding</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <div class="bg-danger bg-opacity-10 rounded-3 p-3">
+                            <i class="bi bi-exclamation-triangle text-danger fs-4"></i>
+                        </div>
+                    </div>
+                    <div class="ms-3">
+                        <h3 class="mb-0">${{ "%.2f"|format(overdue_amount) }}</h3>
+                        <p class="text-muted mb-0 small">Overdue</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <!-- Revenue Chart -->
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0"><i class="bi bi-graph-up me-2"></i>Revenue Over Time</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="revenueChart" height="300"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Invoice Stats -->
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0"><i class="bi bi-pie-chart me-2"></i>Invoice Stats</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>Total Invoices</span>
+                        <strong>{{ total_invoices }}</strong>
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>Paid</span>
+                        <strong class="text-success">{{ paid_invoices }}</strong>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-success" style="width: {{ (paid_invoices / total_invoices * 100) if total_invoices > 0 else 0 }}%"></div>
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>Pending/Overdue</span>
+                        <strong class="text-warning">{{ pending_invoices }}</strong>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-warning" style="width: {{ (pending_invoices / total_invoices * 100) if total_invoices > 0 else 0 }}%"></div>
+                    </div>
+                </div>
+                <div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>Collection Rate</span>
+                        <strong>{{ "%.1f"|format((paid_invoices / total_invoices * 100) if total_invoices > 0 else 0) }}%</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Top Clients -->
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0"><i class="bi bi-trophy me-2"></i>Top Clients by Revenue</h5>
+            </div>
+            <div class="card-body p-0">
+                {% if top_clients %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Client</th>
+                                <th class="text-center">Invoices</th>
+                                <th class="text-end">Revenue</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for client in top_clients %}
+                            <tr>
+                                <td class="fw-semibold">{{ client.name }}</td>
+                                <td class="text-center">{{ client.invoice_count }}</td>
+                                <td class="text-end text-success">${{ "%.2f"|format(client.total_revenue) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-4 text-muted">
+                    <i class="bi bi-trophy" style="font-size: 2rem;"></i>
+                    <p class="mt-2 mb-0">No paid invoices yet</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Payments -->
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Recent Payments</h5>
+            </div>
+            <div class="card-body p-0">
+                {% if recent_paid %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Invoice</th>
+                                <th>Client</th>
+                                <th class="text-end">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for invoice in recent_paid %}
+                            <tr>
+                                <td>
+                                    <a href="{{ url_for('view_invoice', invoice_id=invoice.id) }}" class="text-decoration-none">
+                                        {{ invoice.invoice_number }}
+                                    </a>
+                                    <br>
+                                    <small class="text-muted">{{ invoice.paid_date.strftime('%b %d, %Y') if invoice.paid_date else '' }}</small>
+                                </td>
+                                <td>{{ invoice.client.name }}</td>
+                                <td class="text-end text-success fw-semibold">${{ "%.2f"|format(invoice.total) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-4 text-muted">
+                    <i class="bi bi-cash-stack" style="font-size: 2rem;"></i>
+                    <p class="mt-2 mb-0">No payments received yet</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Year to Date Summary -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0"><i class="bi bi-calendar-check me-2"></i>Year to Date Summary</h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-md-4">
+                        <h2 class="text-success">${{ "%.2f"|format(this_year_revenue) }}</h2>
+                        <p class="text-muted mb-0">Total Revenue This Year</p>
+                    </div>
+                    <div class="col-md-4">
+                        <h2 class="text-primary">{{ paid_invoices }}</h2>
+                        <p class="text-muted mb-0">Invoices Paid</p>
+                    </div>
+                    <div class="col-md-4">
+                        <h2 class="text-info">${{ "%.2f"|format(this_year_revenue / 12 if this_year_revenue > 0 else 0) }}</h2>
+                        <p class="text-muted mb-0">Average Monthly Revenue</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const ctx = document.getElementById('revenueChart').getContext('2d');
+    const monthlyData = {{ monthly_data|tojson }};
+
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: monthlyData.map(d => d.month),
+            datasets: [
+                {
+                    label: 'Revenue (Paid)',
+                    data: monthlyData.map(d => d.revenue),
+                    backgroundColor: 'rgba(40, 167, 69, 0.8)',
+                    borderColor: 'rgba(40, 167, 69, 1)',
+                    borderWidth: 1
+                },
+                {
+                    label: 'Invoiced',
+                    data: monthlyData.map(d => d.invoiced),
+                    backgroundColor: 'rgba(0, 123, 255, 0.3)',
+                    borderColor: 'rgba(0, 123, 255, 1)',
+                    borderWidth: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return '$' + value.toLocaleString();
+                        }
+                    }
+                }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.dataset.label + ': $' + context.raw.toLocaleString();
+                        }
+                    }
+                }
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

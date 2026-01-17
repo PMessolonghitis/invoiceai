@@ -182,6 +182,9 @@
             Created {{ invoice.created_at.strftime('%b %d, %Y at %H:%M') }}
             {% if invoice.view_count > 0 %}
             &middot; Viewed {{ invoice.view_count }} time{{ 's' if invoice.view_count != 1 }}
+            {% if invoice.last_viewed_at %}
+            (last: {{ invoice.last_viewed_at.strftime('%b %d at %H:%M') }})
+            {% endif %}
             {% endif %}
         </div>
     </div>

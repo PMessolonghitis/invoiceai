@@ -122,6 +122,8 @@ class Invoice(db.Model):
 
     # Tracking
     view_count = db.Column(db.Integer, default=0)
+    first_viewed_at = db.Column(db.DateTime)
+    last_viewed_at = db.Column(db.DateTime)
     public_link = db.Column(db.String(100), unique=True)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -129,6 +131,7 @@ class Invoice(db.Model):
 
     # Relationships
     items = db.relationship('InvoiceItem', backref='invoice', lazy=True, cascade='all, delete-orphan')
+    views = db.relationship('InvoiceView', backref='invoice', lazy=True, cascade='all, delete-orphan')
 
     def calculate_totals(self):
         """Recalculate invoice totals"""
@@ -152,6 +155,34 @@ class InvoiceItem(db.Model):
 
     def calculate_total(self):
         self.total = self.quantity * self.unit_price
+
+
+class InvoiceView(db.Model):
+    """Track when invoices are viewed by clients"""
+    id = db.Column(db.Integer, primary_key=True)
+    invoice_id = db.Column(db.Integer, db.ForeignKey('invoice.id'), nullable=False)
+
+    viewed_at = db.Column(db.DateTime, default=datetime.utcnow)
+    ip_address = db.Column(db.String(45))  # IPv6 max length
+    user_agent = db.Column(db.String(500))
+    is_notified = db.Column(db.Boolean, default=False)  # Whether user has seen this notification
+
+
+class Notification(db.Model):
+    """User notifications for invoice views and other events"""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+
+    type = db.Column(db.String(50), nullable=False)  # invoice_viewed, invoice_paid, etc.
+    title = db.Column(db.String(200), nullable=False)
+    message = db.Column(db.Text)
+    link = db.Column(db.String(500))  # URL to related item
+
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relationships
+    user = db.relationship('User', backref=db.backref('notifications', lazy=True, cascade='all, delete-orphan'))
 
 
 class RecurringInvoice(db.Model):
@@ -752,7 +783,39 @@ def duplicate_invoice(invoice_id):
 @app.route('/i/<public_link>')
 def public_invoice(public_link):
     invoice = Invoice.query.filter_by(public_link=public_link).first_or_404()
+
+    # Track the view
+    now = datetime.utcnow()
+    is_first_view = invoice.first_viewed_at is None
+
     invoice.view_count += 1
+    invoice.last_viewed_at = now
+    if is_first_view:
+        invoice.first_viewed_at = now
+
+    # Record detailed view info
+    view = InvoiceView(
+        invoice_id=invoice.id,
+        viewed_at=now,
+        ip_address=request.remote_addr,
+        user_agent=request.user_agent.string[:500] if request.user_agent.string else None
+    )
+    db.session.add(view)
+
+    # Create notification for invoice owner (only on first view or after 1 hour gap)
+    last_view = InvoiceView.query.filter_by(invoice_id=invoice.id).order_by(InvoiceView.viewed_at.desc()).first()
+    should_notify = is_first_view or (last_view and (now - last_view.viewed_at).total_seconds() > 3600)
+
+    if should_notify:
+        notification = Notification(
+            user_id=invoice.user_id,
+            type='invoice_viewed',
+            title=f'Invoice {invoice.invoice_number} was viewed',
+            message=f'Your invoice to {invoice.client.name} for {invoice.currency} {invoice.total:.2f} was just viewed.',
+            link=f'/invoices/{invoice.id}'
+        )
+        db.session.add(notification)
+
     db.session.commit()
     return render_template('invoice_public.html', invoice=invoice)
 
@@ -1492,6 +1555,181 @@ def api_dashboard_stats():
         })
 
     return jsonify(months)
+
+
+@app.route('/api/notifications')
+@login_required
+def api_get_notifications():
+    """Get user notifications"""
+    notifications = Notification.query.filter_by(user_id=current_user.id).order_by(
+        Notification.created_at.desc()
+    ).limit(20).all()
+
+    unread_count = Notification.query.filter_by(user_id=current_user.id, is_read=False).count()
+
+    return jsonify({
+        'unread_count': unread_count,
+        'notifications': [{
+            'id': n.id,
+            'type': n.type,
+            'title': n.title,
+            'message': n.message,
+            'link': n.link,
+            'is_read': n.is_read,
+            'created_at': n.created_at.isoformat()
+        } for n in notifications]
+    })
+
+
+@app.route('/api/notifications/<int:notification_id>/read', methods=['POST'])
+@login_required
+def api_mark_notification_read(notification_id):
+    """Mark a notification as read"""
+    notification = Notification.query.filter_by(id=notification_id, user_id=current_user.id).first_or_404()
+    notification.is_read = True
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@app.route('/api/notifications/mark-all-read', methods=['POST'])
+@login_required
+def api_mark_all_notifications_read():
+    """Mark all notifications as read"""
+    Notification.query.filter_by(user_id=current_user.id, is_read=False).update({'is_read': True})
+    db.session.commit()
+    return jsonify({'success': True})
+
+
+@app.route('/notifications')
+@login_required
+def notifications_page():
+    """View all notifications"""
+    notifications = Notification.query.filter_by(user_id=current_user.id).order_by(
+        Notification.created_at.desc()
+    ).limit(50).all()
+
+    # Mark all as read when viewing the page
+    Notification.query.filter_by(user_id=current_user.id, is_read=False).update({'is_read': True})
+    db.session.commit()
+
+    return render_template('notifications.html', notifications=notifications)
+
+
+# =============================================================================
+# REPORTS & ANALYTICS
+# =============================================================================
+
+@app.route('/reports')
+@login_required
+def reports():
+    """Reports and analytics dashboard"""
+    # Date ranges
+    today = datetime.utcnow().date()
+    this_month_start = today.replace(day=1)
+    last_month_start = (this_month_start - relativedelta(months=1))
+    last_month_end = this_month_start - timedelta(days=1)
+    this_year_start = today.replace(month=1, day=1)
+
+    # Revenue stats
+    total_revenue = db.session.query(db.func.sum(Invoice.total)).filter(
+        Invoice.user_id == current_user.id,
+        Invoice.status == 'paid'
+    ).scalar() or 0
+
+    this_month_revenue = db.session.query(db.func.sum(Invoice.total)).filter(
+        Invoice.user_id == current_user.id,
+        Invoice.status == 'paid',
+        Invoice.paid_date >= this_month_start
+    ).scalar() or 0
+
+    last_month_revenue = db.session.query(db.func.sum(Invoice.total)).filter(
+        Invoice.user_id == current_user.id,
+        Invoice.status == 'paid',
+        Invoice.paid_date >= last_month_start,
+        Invoice.paid_date <= last_month_end
+    ).scalar() or 0
+
+    this_year_revenue = db.session.query(db.func.sum(Invoice.total)).filter(
+        Invoice.user_id == current_user.id,
+        Invoice.status == 'paid',
+        Invoice.paid_date >= this_year_start
+    ).scalar() or 0
+
+    # Outstanding amount
+    outstanding_amount = db.session.query(db.func.sum(Invoice.total)).filter(
+        Invoice.user_id == current_user.id,
+        Invoice.status.in_(['sent', 'overdue'])
+    ).scalar() or 0
+
+    overdue_amount = db.session.query(db.func.sum(Invoice.total)).filter(
+        Invoice.user_id == current_user.id,
+        Invoice.status == 'overdue'
+    ).scalar() or 0
+
+    # Invoice counts
+    total_invoices = Invoice.query.filter_by(user_id=current_user.id).count()
+    paid_invoices = Invoice.query.filter_by(user_id=current_user.id, status='paid').count()
+    pending_invoices = Invoice.query.filter(
+        Invoice.user_id == current_user.id,
+        Invoice.status.in_(['sent', 'overdue'])
+    ).count()
+
+    # Top clients by revenue
+    top_clients = db.session.query(
+        Client.name,
+        db.func.sum(Invoice.total).label('total_revenue'),
+        db.func.count(Invoice.id).label('invoice_count')
+    ).join(Invoice).filter(
+        Invoice.user_id == current_user.id,
+        Invoice.status == 'paid'
+    ).group_by(Client.id).order_by(db.desc('total_revenue')).limit(5).all()
+
+    # Monthly revenue for chart (last 12 months)
+    monthly_data = []
+    for i in range(11, -1, -1):
+        date = datetime.utcnow() - relativedelta(months=i)
+        month_start = date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        month_end = (month_start + relativedelta(months=1))
+
+        revenue = db.session.query(db.func.sum(Invoice.total)).filter(
+            Invoice.user_id == current_user.id,
+            Invoice.status == 'paid',
+            Invoice.paid_date >= month_start.date(),
+            Invoice.paid_date < month_end.date()
+        ).scalar() or 0
+
+        invoiced = db.session.query(db.func.sum(Invoice.total)).filter(
+            Invoice.user_id == current_user.id,
+            Invoice.issue_date >= month_start.date(),
+            Invoice.issue_date < month_end.date()
+        ).scalar() or 0
+
+        monthly_data.append({
+            'month': date.strftime('%b %Y'),
+            'revenue': round(revenue, 2),
+            'invoiced': round(invoiced, 2)
+        })
+
+    # Recent activity
+    recent_paid = Invoice.query.filter_by(
+        user_id=current_user.id,
+        status='paid'
+    ).order_by(Invoice.paid_date.desc()).limit(5).all()
+
+    return render_template('reports.html',
+        total_revenue=total_revenue,
+        this_month_revenue=this_month_revenue,
+        last_month_revenue=last_month_revenue,
+        this_year_revenue=this_year_revenue,
+        outstanding_amount=outstanding_amount,
+        overdue_amount=overdue_amount,
+        total_invoices=total_invoices,
+        paid_invoices=paid_invoices,
+        pending_invoices=pending_invoices,
+        top_clients=top_clients,
+        monthly_data=monthly_data,
+        recent_paid=recent_paid
+    )
 
 
 # =============================================================================

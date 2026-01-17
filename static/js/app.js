@@ -108,3 +108,91 @@ function formatDate(dateString) {
     const options = { year: 'numeric', month: 'long', day: 'numeric' };
     return new Date(dateString).toLocaleDateString('en-US', options);
 }
+
+// Notifications functionality
+(function() {
+    const notificationBadge = document.getElementById('notificationBadge');
+    const notificationList = document.getElementById('notificationList');
+    const markAllReadBtn = document.getElementById('markAllRead');
+
+    if (!notificationBadge) return; // Not logged in
+
+    function loadNotifications() {
+        fetch('/api/notifications')
+            .then(response => response.json())
+            .then(data => {
+                // Update badge
+                if (data.unread_count > 0) {
+                    notificationBadge.textContent = data.unread_count > 9 ? '9+' : data.unread_count;
+                    notificationBadge.classList.remove('d-none');
+                } else {
+                    notificationBadge.classList.add('d-none');
+                }
+
+                // Update list
+                if (data.notifications.length === 0) {
+                    notificationList.innerHTML = '<div class="text-center py-3 text-muted"><small>No notifications</small></div>';
+                    return;
+                }
+
+                let html = '';
+                data.notifications.slice(0, 5).forEach(function(n) {
+                    const timeAgo = getTimeAgo(new Date(n.created_at));
+                    const unreadClass = n.is_read ? '' : 'bg-light';
+                    html += `
+                        <a class="dropdown-item py-2 ${unreadClass}" href="${n.link}" style="white-space: normal;">
+                            <div class="d-flex align-items-start">
+                                <i class="bi bi-eye text-primary me-2 mt-1"></i>
+                                <div>
+                                    <div class="fw-semibold small">${escapeHtml(n.title)}</div>
+                                    <div class="text-muted small">${timeAgo}</div>
+                                </div>
+                            </div>
+                        </a>
+                    `;
+                });
+                notificationList.innerHTML = html;
+            })
+            .catch(err => {
+                console.error('Failed to load notifications:', err);
+                notificationList.innerHTML = '<div class="text-center py-3 text-muted"><small>Failed to load</small></div>';
+            });
+    }
+
+    function getTimeAgo(date) {
+        const seconds = Math.floor((new Date() - date) / 1000);
+        if (seconds < 60) return 'Just now';
+        const minutes = Math.floor(seconds / 60);
+        if (minutes < 60) return `${minutes}m ago`;
+        const hours = Math.floor(minutes / 60);
+        if (hours < 24) return `${hours}h ago`;
+        const days = Math.floor(hours / 24);
+        if (days < 7) return `${days}d ago`;
+        return date.toLocaleDateString();
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // Mark all as read
+    if (markAllReadBtn) {
+        markAllReadBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            fetch('/api/notifications/mark-all-read', { method: 'POST' })
+                .then(() => {
+                    notificationBadge.classList.add('d-none');
+                    loadNotifications();
+                });
+        });
+    }
+
+    // Load on page load
+    loadNotifications();
+
+    // Refresh every 60 seconds
+    setInterval(loadNotifications, 60000);
+})();

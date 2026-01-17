@@ -97,6 +97,30 @@
         .total-row.final .amount {
             color: #4f46e5;
         }
+
+        /* Template: Classic (Gray) */
+        .template-classic .header-left h1 { color: #6c757d; }
+        .template-classic .total-row.final .amount { color: #6c757d; }
+        .template-classic th { background: #f8f9fa; border-bottom-color: #6c757d; }
+
+        /* Template: Minimal (Clean) */
+        .template-minimal .header-left h1 { color: #212529; font-weight: 300; }
+        .template-minimal .total-row.final .amount { color: #212529; }
+        .template-minimal th { border-bottom: 1px solid #dee2e6; }
+        .template-minimal td { border-bottom: none; }
+
+        /* Template: Bold (Dark) */
+        .template-bold .header-left h1 { color: #212529; font-size: 32px; font-weight: 800; }
+        .template-bold .total-row.final .amount { color: #212529; }
+        .template-bold th { background: #212529; color: #fff; border-bottom: none; }
+        .template-bold .total-row.final { border-top-color: #212529; }
+
+        /* Template: Elegant (Gold) */
+        .template-elegant .header-left h1 { color: #b8860b; font-style: italic; }
+        .template-elegant .total-row.final .amount { color: #b8860b; }
+        .template-elegant th { border-bottom-color: #b8860b; }
+        .template-elegant .total-row.final { border-top-color: #b8860b; }
+
         .notes-section {
             margin-top: 40px;
         }
@@ -126,7 +150,7 @@
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="container template-{{ invoice.template }}">
         {% if invoice.status == 'paid' %}
         <div class="status-paid">PAID</div>
         {% elif invoice.status == 'overdue' %}

@@ -154,9 +154,11 @@
                         <div class="col-md-4">
                             <label class="form-label">Template</label>
                             <select name="template" class="form-select">
-                                <option value="modern" {{ 'selected' if recurring and recurring.template == 'modern' }}>Modern</option>
-                                <option value="classic" {{ 'selected' if recurring and recurring.template == 'classic' }}>Classic</option>
-                                <option value="minimal" {{ 'selected' if recurring and recurring.template == 'minimal' }}>Minimal</option>
+                                <option value="modern" {{ 'selected' if recurring and recurring.template == 'modern' }}>Modern (Blue)</option>
+                                <option value="classic" {{ 'selected' if recurring and recurring.template == 'classic' }}>Classic (Gray)</option>
+                                <option value="minimal" {{ 'selected' if recurring and recurring.template == 'minimal' }}>Minimal (Clean)</option>
+                                <option value="bold" {{ 'selected' if recurring and recurring.template == 'bold' }}>Bold (Dark)</option>
+                                <option value="elegant" {{ 'selected' if recurring and recurring.template == 'elegant' }}>Elegant (Gold)</option>
                             </select>
                         </div>
                     </div>
