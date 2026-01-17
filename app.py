@@ -16,7 +16,6 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
-from babel.numbers import format_currency
 from dateutil.relativedelta import relativedelta
 
 # Load environment variables
@@ -32,6 +31,12 @@ CORS(app)
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
+
+
+# Health check endpoint
+@app.route('/health')
+def health():
+    return jsonify({"status": "healthy"}), 200
 
 # =============================================================================
 # DATABASE MODELS
